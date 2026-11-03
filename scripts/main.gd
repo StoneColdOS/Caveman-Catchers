@@ -1,0 +1,187 @@
+extends Node3D
+## Builds the grey-box jungle clearing, the player, the cavemen and the HUD.
+## Everything is placeholder shapes on purpose: we're testing fun, not art.
+
+const Util := preload("res://scripts/util.gd")
+const Controls := preload("res://scripts/controls.gd")
+const PlayerScript := preload("res://scripts/player.gd")
+const GathererScript := preload("res://scripts/gatherer.gd")
+
+const ARENA := 50.0
+const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14)]
+
+var player: CharacterBody3D
+var caught := 0
+var count_label: Label
+var message_label: Label
+var rng := RandomNumberGenerator.new()
+
+
+func _ready() -> void:
+	Controls.setup()
+	rng.seed = 7
+	_build_environment()
+	_build_ground()
+	_build_cover()
+	_spawn_player()
+	_spawn_gatherers()
+	_build_hud()
+
+
+func _process(_delta: float) -> void:
+	if Input.is_action_just_pressed("restart"):
+		get_tree().reload_current_scene()
+
+
+func _build_environment() -> void:
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.45, 0.62, 0.55)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.55, 0.65, 0.55)
+	env.ambient_light_energy = 0.6
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.45, 0.62, 0.55)
+	env.fog_density = 0.01
+	var we := WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+
+	var sun := DirectionalLight3D.new()
+	sun.rotation_degrees = Vector3(-55, 35, 0)
+	sun.light_energy = 1.1
+	sun.shadow_enabled = true
+	add_child(sun)
+
+
+func _build_ground() -> void:
+	_static_box(Vector3(ARENA + 20, 1, ARENA + 20), Vector3(0, -0.5, 0), Color(0.28, 0.45, 0.22))
+	# Thick jungle walls around the edge
+	var h := ARENA / 2.0
+	var wall := Color(0.12, 0.25, 0.12)
+	_static_box(Vector3(ARENA + 4, 6, 2), Vector3(0, 3, -h - 1), wall)
+	_static_box(Vector3(ARENA + 4, 6, 2), Vector3(0, 3, h + 1), wall)
+	_static_box(Vector3(2, 6, ARENA), Vector3(-h - 1, 3, 0), wall)
+	_static_box(Vector3(2, 6, ARENA), Vector3(h + 1, 3, 0), wall)
+
+
+## Rocks and trees: things to sneak behind. They block caveman eyesight.
+func _build_cover() -> void:
+	for i in 14:
+		var p := _random_spot()
+		var size := Vector3(rng.randf_range(1.5, 4.0), rng.randf_range(1.2, 2.8), rng.randf_range(1.5, 4.0))
+		var rock := _static_box(size, p + Vector3(0, size.y / 2.0, 0), Color(0.42, 0.4, 0.36))
+		rock.rotation.y = rng.randf() * TAU
+	for i in 18:
+		var p := _random_spot()
+		_tree(p)
+
+
+func _tree(p: Vector3) -> void:
+	var body := StaticBody3D.new()
+	body.collision_layer = Util.LAYER_WORLD
+	body.position = p
+	add_child(body)
+	var trunk_h := rng.randf_range(4.0, 6.5)
+	var shape := CollisionShape3D.new()
+	var cyl_shape := CylinderShape3D.new()
+	cyl_shape.radius = 0.45
+	cyl_shape.height = trunk_h
+	shape.shape = cyl_shape
+	shape.position.y = trunk_h / 2.0
+	body.add_child(shape)
+	var trunk := CylinderMesh.new()
+	trunk.top_radius = 0.35
+	trunk.bottom_radius = 0.5
+	trunk.height = trunk_h
+	trunk.radial_segments = 6
+	body.add_child(Util.mesh(trunk, Color(0.35, 0.24, 0.15), Vector3(0, trunk_h / 2.0, 0)))
+	body.add_child(Util.mesh(Util.sphere(rng.randf_range(1.6, 2.4)), Color(0.18, 0.42, 0.18), Vector3(0, trunk_h + 0.6, 0)))
+
+
+func _random_spot() -> Vector3:
+	# Keep the middle open near the player start, and away from walls.
+	while true:
+		var p := Vector3(rng.randf_range(-21, 21), 0, rng.randf_range(-21, 21))
+		if p.length() > 5.0:
+			return p
+	return Vector3.ZERO
+
+
+func _static_box(size: Vector3, pos: Vector3, color: Color) -> StaticBody3D:
+	var body := StaticBody3D.new()
+	body.collision_layer = Util.LAYER_WORLD
+	body.position = pos
+	var shape := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = size
+	shape.shape = box
+	body.add_child(shape)
+	body.add_child(Util.mesh(Util.box(size), color))
+	add_child(body)
+	return body
+
+
+func _spawn_player() -> void:
+	player = CharacterBody3D.new()
+	player.set_script(PlayerScript)
+	player.name = "Player"
+	player.position = Vector3(0, 0.1, 0)
+	add_child(player)
+	player.caught_one.connect(_on_caught)
+
+
+func _spawn_gatherers() -> void:
+	for spot in GATHERER_SPOTS:
+		var g := CharacterBody3D.new()
+		g.set_script(GathererScript)
+		g.position = spot + Vector3(0, 0.1, 0)
+		add_child(g)
+
+
+func _build_hud() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+
+	count_label = Label.new()
+	count_label.position = Vector2(24, 18)
+	count_label.add_theme_font_size_override("font_size", 34)
+	count_label.add_theme_constant_override("outline_size", 8)
+	count_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(count_label)
+
+	var hint := Label.new()
+	hint.text = "Move: L-stick   Camera: R-stick   Crouch: L1   Net: R1   Restart: Start"
+	hint.anchor_top = 1.0
+	hint.anchor_bottom = 1.0
+	hint.offset_top = -44
+	hint.offset_left = 24
+	hint.add_theme_font_size_override("font_size", 20)
+	hint.add_theme_constant_override("outline_size", 6)
+	hint.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(hint)
+
+	message_label = Label.new()
+	message_label.set_anchors_preset(Control.PRESET_CENTER)
+	message_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	message_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message_label.add_theme_font_size_override("font_size", 52)
+	message_label.add_theme_constant_override("outline_size", 12)
+	message_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(message_label)
+
+	_update_hud()
+
+
+func _on_caught() -> void:
+	caught += 1
+	_update_hud()
+
+
+func _update_hud() -> void:
+	count_label.text = "Caught: %d / %d" % [caught, GATHERER_SPOTS.size()]
+	if caught >= GATHERER_SPOTS.size():
+		message_label.text = "All cavemen caught!\nPress Start to play again"
+	else:
+		message_label.text = ""

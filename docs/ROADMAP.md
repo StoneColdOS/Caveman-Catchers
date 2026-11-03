@@ -6,6 +6,23 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 
 ---
 
+## Prototype 1: one Gatherer (current)
+
+The smallest playable thing. Grey shapes only.
+
+- [x] Grey-box jungle clearing with rocks and trees to hide behind
+- [x] Player capsule: move, crouch, third-person camera
+- [x] One standard caveman type (Gatherer), three of them in the area
+- [x] Vision cone you can see: green (calm), yellow (suspicious), red (spotted)
+- [x] Crouching shrinks how far they can see you; rocks block their view
+- [x] Spotted Gatherers run away, then calm down if they lose you
+- [x] Net swing to catch, beam-away effect, catch counter
+- [ ] Play it on the Thor and decide: is sneaking up on one of these fun?
+
+Tranq, health and other caveman types wait until this feels good.
+
+---
+
 ## Phase 0: Setup
 
 Get the project running on desktop and the Thor before writing real gameplay.

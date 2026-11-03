@@ -32,17 +32,20 @@ Tagline: *Catch those damn dirty humans.*
 - **When spotted:** cavemen flee, fight back, or raise an alarm
 - **Fail state:** health and game over, Ape Escape style
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
-- **Engine:** Godot 4 (assumed, confirm)
+- **Engine:** Godot 4.7
+- **Scope rule:** start super small. One caveman type, one tool (net), one grey-box area. Grow only from what's fun.
 
-## Caveman types (proposed, needs sign-off)
+## Caveman types
 
-Each type has one clear reaction, so players can read a situation and plan, instead of encounters feeling random.
+**Locked: start with one standard type only, the Gatherer.** More types come only once catching a Gatherer feels great.
 
-| Type | When spotted | Notes |
+| Type | When spotted | Status |
 |---|---|---|
-| Gatherer | Flees | The basic target. Teaches catching |
-| Brute | Fights back with a club | Can damage you. Tranq is safer here |
-| Lookout | Sounds a horn alarm | Alerts the area. Priority target to catch first |
+| Gatherer | Gets suspicious, then flees | **Building now** |
+| Brute | Fights back with a club | Parked idea |
+| Lookout | Sounds a horn alarm | Parked idea |
+
+Each future type should have one clear reaction, so players can read a situation and plan instead of encounters feeling random.
 
 ## Tone and sensitivity guardrails
 
