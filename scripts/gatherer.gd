@@ -3,12 +3,10 @@ extends CharacterBody3D
 ##   Calm:        wanders, forages with his head down (half blind), stops to look around.
 ##   Hears noise: hops, says "?", walks over to check it out, looks around.
 ##   Sees you:    stares while his "?" grows. Lose him and he checks where he last saw you.
-##   Spotted:     leaps, yells and runs to warn the tribe. Countdown over his head:
-##                net him or dart him before it hits zero, or it's game over.
-##   Darted:      staggers and yelps for a moment (nearby cavemen hear it), then drops.
+##   Spotted:     leaps, yells (nearby robots hear it) and runs, panic-hopping.
+##                Lose him and he calms down. Chase him down, or dart him.
+##   Darted:      staggers and yelps for a moment (nearby robots hear it), then drops.
 ##   Asleep:      lies flat ("Zzz"), easy to net, wakes up groggy.
-
-signal warned_tribe
 
 enum State { WANDER, FORAGE, SUSPICIOUS, INVESTIGATE, FLEE, CAUGHT, DROWSY, SLEEP }
 
@@ -26,7 +24,7 @@ const FORAGE_FOV_DEG := 70.0
 const NOTICE_TIME := 0.8         # seconds in view (at max range) to spot you; faster up close
 const CALM_RATE := 0.25
 const HEAR_BUMP := 0.3
-const WARN_TIME := 5.0           # seconds you have to stop a spotter
+const FLEE_TIME := 4.0           # how long he keeps running after losing sight of you
 const YELL_RADIUS := 10.0
 const YELP_RADIUS := 7.0         # yelp when a dart hits
 const DROWSY_TIME := 2.0         # dart takes this long to kick in
@@ -49,7 +47,7 @@ var turn_timer := 0.0
 var give_up := 0.0
 var state_timer := 0.0
 var look_timer := 0.0
-var warn_timer := 0.0
+var flee_timer := 0.0
 var hop_timer := 0.0
 var drowsy_timer := 0.0
 var sleep_timer := 0.0
@@ -62,8 +60,6 @@ var head: Node3D
 var key: Node3D
 var eye_mat: StandardMaterial3D
 var glitch_timer := 0.0
-var alerted := false
-var escaped_for_good := false
 var cone: MeshInstance3D
 var cone_mat: StandardMaterial3D
 var alert: Label3D
@@ -204,7 +200,7 @@ func _do_wander(delta: float, sees: bool) -> Vector3:
 		turn_speed = 3.0
 		if scan and turn_timer <= 0.0:
 			heading += randf_range(-1.8, 1.8)
-			turn_timer = randf_range(0.8, 1.6) * (0.5 if alerted else 1.0)
+			turn_timer = randf_range(0.8, 1.6)
 		if wait_timer <= 0.0:
 			_pick_wander_target()
 		return Vector3.ZERO
@@ -227,8 +223,6 @@ func _do_forage(delta: float, sees: bool) -> void:
 	if sees:
 		_become_suspicious(true)
 		return
-	if alerted:
-		state_timer = 0.0  # no foraging during an alert
 	state_timer -= delta
 	if state_timer <= 0.0:
 		state = State.WANDER
@@ -238,7 +232,7 @@ func _do_forage(delta: float, sees: bool) -> void:
 
 func _do_suspicious(delta: float, sees: bool) -> void:
 	if sees:
-		awareness += delta / NOTICE_TIME * _closeness_boost() * (1.8 if alerted else 1.0)
+		awareness += delta / NOTICE_TIME * _closeness_boost()
 		last_seen = player.global_position
 		_face(last_seen, 3.0)
 		if awareness >= 1.0:
@@ -279,13 +273,15 @@ func _do_investigate(delta: float, sees: bool) -> Vector3:
 
 
 func _do_flee(delta: float, sees: bool) -> Vector3:
+	# Ape Escape style: he just runs. Keep him in sight or he'll calm down and lose you.
 	if sees:
+		flee_timer = FLEE_TIME
 		last_seen = player.global_position
-	# Running to warn the tribe. Stop him before the countdown runs out.
-	warn_timer -= delta
-	if warn_timer <= 0.0:
-		warn_timer = 0.0
-		_blast_off()
+	else:
+		flee_timer -= delta
+	if flee_timer <= 0.0:
+		awareness = 0.6
+		_start_investigate(last_seen, false)
 		return Vector3.ZERO
 	# Panic hops while running.
 	hop_timer -= delta
@@ -295,28 +291,6 @@ func _do_flee(delta: float, sees: bool) -> Vector3:
 	var away := _flat(global_position - player.global_position).normalized()
 	_face(global_position + away, 10.0)
 	return away * FLEE_SPEED
-
-
-## Got away: his janky rocket kicks in and he's gone for good. Everyone else goes on alert.
-func _blast_off() -> void:
-	state = State.CAUGHT  # out of play
-	escaped_for_good = true
-	collision_layer = 0
-	collision_mask = 0
-	alert.text = ""
-	cone.visible = false
-	Util.noise_ring(get_parent(), global_position, 30.0, Color(1, 0.2, 0.15, 0.9))
-	warned_tribe.emit()
-	_spark()
-	var tw := create_tween()
-	tw.tween_property(visual, "position", visual.position + Vector3(randf_range(-2, 2), 18, randf_range(-2, 2)), 1.2).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
-	tw.parallel().tween_property(visual, "rotation:z", randf_range(-4, 4), 1.2)
-	tw.tween_callback(queue_free)
-
-
-## Area alert: sharper eyes, faster to spot you, constantly looking around.
-func set_alert(on: bool) -> void:
-	alerted = on
 
 
 func _do_drowsy(delta: float) -> Vector3:
@@ -344,7 +318,6 @@ func tranq() -> void:
 		return
 	state = State.DROWSY
 	drowsy_timer = DROWSY_TIME
-	warn_timer = 0.0
 	velocity.x = 0.0
 	velocity.z = 0.0
 	_hop(3.0)
@@ -373,7 +346,7 @@ func _start_investigate(point: Vector3, hop: bool) -> void:
 func _start_flee() -> void:
 	state = State.FLEE
 	awareness = 1.0
-	warn_timer = WARN_TIME
+	flee_timer = FLEE_TIME
 	hop_timer = 0.9
 	_hop(6.0)
 	# Yell! Nearby cavemen hear it and come check it out.
@@ -423,8 +396,6 @@ func _sight_range() -> float:
 	var sight := SIGHT_RANGE_CROUCH if player.crouching else SIGHT_RANGE
 	if state == State.FORAGE:
 		sight *= FORAGE_SIGHT
-	if alerted:
-		sight *= 1.35
 	return sight
 
 
@@ -444,7 +415,7 @@ func is_drowsy() -> bool:
 	return state == State.DROWSY
 
 
-func is_warning() -> bool:
+func is_fleeing() -> bool:
 	return state == State.FLEE
 
 
@@ -510,7 +481,7 @@ func _update_indicators(delta: float) -> void:
 			alert.modulate = Color(1, 0.85, 0.2)
 		State.FLEE:
 			cone_mat.albedo_color = CONE_SPOTTED
-			alert.text = "! %d" % ceil(warn_timer)
+			alert.text = "!"
 			alert.modulate = Color(1, 0.3, 0.25)
 		State.DROWSY:
 			alert.text = "!?"

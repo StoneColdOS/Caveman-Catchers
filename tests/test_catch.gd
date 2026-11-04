@@ -29,19 +29,15 @@ func _run() -> void:
 	for i in 60:
 		await physics_frame
 		max_y = max(max_y, g1.global_position.y)
-	_check(g1.is_warning(), "Spotted: he runs to warn the tribe")
+	_check(g1.is_fleeing(), "Spotted: he runs away")
 	_check(max_y > 0.5, "Gatherer jumps when he spots you")
-	_check(g1.warn_timer > 0.0 and g1.warn_timer < g1.WARN_TIME, "Warning countdown is ticking")
-	_check(main.alert_label.text.begins_with("SPOTTED"), "HUD shows the spotted countdown")
 	# Stop him in time: chase him down and net him.
 	player.global_position = g1.global_position - g1.velocity.normalized() * 1.2
 	player.visual.rotation.y = atan2(g1.velocity.x, g1.velocity.z)
 	await _frames(1)
 	player.swing_net()
-	_check(g1.is_caught(), "Catching the spotter in time stops the alert")
+	_check(g1.is_caught(), "You can chase down a runner and net him")
 	await _frames(5)
-	_check(not main.game_over, "No game over when you stop him")
-	_check(main.alert_label.text == "", "Alert clears")
 
 	# --- 2. Crouch-sneak up behind another one and net him.
 	var g2 = gs[2]
@@ -142,24 +138,21 @@ func _run() -> void:
 	player.darts = 0
 	_check(not player.fire_tranq(), "Out of darts: nothing fires")
 
-	# --- 6. Let a spotter get away: he escapes for good, the area goes on alert, no game over.
+	# --- 6. Lose a runner: he runs while he can see you, then calms down. No penalty.
 	player.global_position = Vector3(0, 0.1, 0)
 	await _frames(3)
 	g0.state = g0.State.SUSPICIOUS
 	g0._start_flee()
-	for i in 330:
-		await physics_frame
-		if main.escaped > 0:
-			break
-	_check(main.escaped == 1, "Spotter gets away after the countdown")
-	_check(g0.escaped_for_good, "...and he's gone for good")
-	_check(main.area_alert > 0.0 and g3.alerted, "Everyone else goes on alert")
-	_check(main.alert_label.text.begins_with("AREA ALERT"), "HUD shows the area alert")
-	_check(g3._sight_range() > g3.SIGHT_RANGE * 1.2, "Alerted robots see further")
-	_check(main.game_over == false or main.caught + main.escaped >= 5, "No instant game over")
-	main.area_alert = 0.01
-	await _frames(5)
-	_check(not g3.alerted, "Alert wears off")
+	_check(g0.is_fleeing(), "Runner is running")
+	var away_spot: Vector3 = g0.global_position + Vector3(20, 0, 0)  # well out of sight range
+	away_spot.x = clamp(away_spot.x, -22.0, 22.0)
+	if away_spot.distance_to(g0.global_position) < 15.0:
+		away_spot = g0.global_position - Vector3(20, 0, 0)
+	player.global_position = away_spot
+	g0.flee_timer = 0.05
+	await _frames(10)
+	_check(not g0.is_fleeing() and g0.state == g0.State.INVESTIGATE, "Lose sight of him and he calms down to searching")
+	_check(not main.game_over, "No game over for getting spotted")
 
 	# --- 7. Touch controls drive the same actions.
 	var TouchScript := load("res://scripts/touch_controls.gd")

@@ -20,8 +20,6 @@ var alert_label: Label
 var crosshair: Control
 var game_over := false
 var hint_label: Label
-var escaped := 0
-var area_alert := 0.0
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -236,7 +234,6 @@ func _spawn_gatherers() -> void:
 		g.set_script(GathererScript)
 		g.position = spot + Vector3(0, 0.1, 0)
 		add_child(g)
-		g.warned_tribe.connect(_on_warned)
 
 
 func _build_hud() -> void:
@@ -316,37 +313,9 @@ func _build_hud() -> void:
 	_update_hud()
 
 
-const ALERT_TIME := 30.0
-
-## Top banner: countdown for a robot running to escape, or the area alert timer.
+## Spotted robots just run (Ape Escape style); the "!" over their heads is the only alarm.
 func _update_alert() -> void:
-	if alert_label == null:
-		return
-	if area_alert > 0.0:
-		area_alert -= get_process_delta_time()
-		if area_alert <= 0.0:
-			get_tree().call_group("gatherers", "set_alert", false)
-	var shortest := INF
-	for g in get_tree().get_nodes_in_group("gatherers"):
-		if g.is_warning():
-			shortest = min(shortest, g.warn_timer)
-	var flash := 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.02)
-	if shortest != INF:
-		alert_label.text = "SPOTTED!  Stop him: %.1f" % shortest
-		alert_label.modulate = Color(1, 0.25 * flash, 0.2 * flash)
-	elif area_alert > 0.0:
-		alert_label.text = "AREA ALERT  %d" % ceil(area_alert)
-		alert_label.modulate = Color(1, 0.55 * flash + 0.2, 0.2)
-	else:
-		alert_label.text = ""
-
-
-## A robot got away. He's gone for good and every other robot goes on alert.
-func _on_warned() -> void:
-	escaped += 1
-	area_alert = ALERT_TIME
-	get_tree().call_group("gatherers", "set_alert", true)
-	_update_hud()
+	pass
 
 
 func _on_caught() -> void:
@@ -357,13 +326,8 @@ func _on_caught() -> void:
 func _update_hud() -> void:
 	var total := GATHERER_SPOTS.size()
 	count_label.text = "Caught: %d / %d" % [caught, total]
-	if escaped > 0:
-		count_label.text += "   Escaped: %d" % escaped
-	if caught + escaped >= total:
+	if caught >= total:
 		game_over = true
-		if caught == total:
-			message_label.text = "Perfect! Every robot monkey caught.\nPress Start to play again"
-		else:
-			message_label.text = "Round over: %d of %d caught.\nPress Start to try for all %d" % [caught, total, total]
+		message_label.text = "Every robot monkey caught!\nPress Start to play again"
 	else:
 		message_label.text = ""

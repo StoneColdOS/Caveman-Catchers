@@ -4,6 +4,16 @@ The rule for this project: **prove it's fun before making it big.** Each phase e
 
 Art comes late on purpose. Everything starts as grey boxes and capsules.
 
+
+## Prototype 5: old space chimp vs janky robot monkeys (current)
+
+- [x] New concept: a grumpy old space chimp (shadowed eyes, smokes inside his helmet, robot arm) catching janky, broken robot monkeys in the jungle. Moon later
+- [x] Touch controls and a web version for iPhone, hosted on GitHub Pages
+- [x] Tried: escaped robots gone for good plus a 30s area alert. **Verdict:** didn't like the alert system either
+- [x] Back to Ape Escape style: spotted robots just run away and calm down if they lose you. The chase is the challenge
+- [x] Kept: real aiming with a red-on-target crosshair, delayed darts, 5 darts
+- [ ] Rubber hose art style test
+
 ---
 
 ## Prototype 1: one Gatherer (current)
@@ -38,7 +48,7 @@ Still one caveman type, still grey boxes.
 - [x] Burrows: spotted cavemen hide in a burrow and pop out elsewhere. **Cut:** didn't like it
 - [x] Tranq gun with auto-aim and 6 darts. **Verdict:** way too easy, could tranq everyone
 
-## Prototype 4: the radio-in alert (current)
+## Prototype 4: the radio-in alert
 
 - [x] Spotted = alert. The caveman yells and runs to warn the tribe with a 5 second countdown over his head and on screen. Net him or dart him in time, or it's game over
 - [x] Real aiming: hold L2 for an over-the-shoulder view with a crosshair, R2 fires. No auto-aim. Crouch moved to L1 only
