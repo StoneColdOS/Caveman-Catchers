@@ -31,7 +31,7 @@ Still one caveman type, still grey boxes.
 - [x] Jumping for the player; cavemen hop when startled, leap and yell when they spot you, panic-hop when fleeing
 - [x] Spotted yells alert nearby cavemen
 - [x] 5 cavemen
-- [ ] Play it on the Thor: is it tense now? Too hard? Is the chase fun?
+- [x] Play it on the Thor. Verdict: way more challenging, crouching is a great addition, feels like a real Ape Escape x MGS crossover. Jumping onto alerted cavemen to catch them works
 
 Tranq, health and other caveman types wait until this feels good.
 
