@@ -109,6 +109,13 @@ func _build_visual() -> void:
 	body.rotation.z = randf_range(-0.08, 0.08)
 	torso.add_child(body)
 	torso.add_child(Util.mesh(Util.box(Vector3(0.2, 0.16, 0.02)), rust, Vector3(-0.14, 0.66 + y, 0.26)))
+	# Chest panel with speaker slots and corner rivets, so the body isn't a plain box
+	torso.add_child(Util.mesh(Util.box(Vector3(0.3, 0.26, 0.03)), tin.darkened(0.18), Vector3(0.08, 0.84 + y, 0.255)))
+	for i in 3:
+		torso.add_child(Util.mesh(Util.box(Vector3(0.2, 0.025, 0.02)), Color(0.12, 0.12, 0.12), Vector3(0.08, 0.9 + y - i * 0.06, 0.272), false))
+	for cx in [-0.27, 0.27]:
+		for cy in [0.5, 1.06]:
+			torso.add_child(Util.mesh(Util.sphere(0.03), tin.lightened(0.25), Vector3(cx, cy + y, 0.255), false))
 	# Legs and arms hang from pivots so they can swing, scissor and flail.
 	for side in [-1.0, 1.0]:
 		var hip := Node3D.new()
@@ -133,19 +140,22 @@ func _build_visual() -> void:
 	head.position = Vector3(0, head_base_y, 0)
 	torso.add_child(head)
 	head.add_child(Util.mesh(Util.box(Vector3(0.56, 0.42, 0.4)), tin.lightened(0.1), Vector3.ZERO))
-	head.add_child(Util.mesh(Util.box(Vector3(0.44, 0.3, 0.02)), Color(0.05, 0.07, 0.06), Vector3(0, 0, 0.205)))
+	head.add_child(Util.mesh(Util.box(Vector3(0.5, 0.36, 0.04)), tin.darkened(0.3), Vector3(0, 0, 0.2)))  # screen bezel
+	head.add_child(Util.mesh(Util.box(Vector3(0.44, 0.3, 0.02)), Color(0.05, 0.07, 0.06), Vector3(0, 0, 0.225), false))
+	head.add_child(Util.mesh(Util.box(Vector3(0.06, 0.06, 0.04)), Color(0.75, 0.2, 0.15), Vector3(0.21, -0.14, 0.22), false))  # knob
 	head.add_child(Util.mesh(Util.sphere(0.12), tin.darkened(0.15), Vector3(-0.32, 0.08, 0)))
 	head.add_child(Util.mesh(Util.sphere(0.12), tin.darkened(0.15), Vector3(0.32, 0.08, 0)))
 	var ant := Util.mesh(Util.box(Vector3(0.02, 0.22, 0.02)), Color(0.3, 0.3, 0.32), Vector3(0.12, 0.3, 0))
 	ant.rotation.z = randf_range(-0.6, 0.6)
 	head.add_child(ant)
+	ant.add_child(Util.mesh(Util.sphere(0.04), Color(0.9, 0.3, 0.2), Vector3(0, 0.12, 0)))  # antenna bulb
 	# Screen eyes (unshaded so they glow); color shows his mood
 	eye_mat = Util.mat(Color(0.3, 1.0, 0.5), true)
 	for ex in [-0.1, 0.1]:
 		var eye := MeshInstance3D.new()
 		eye.mesh = Util.box(Vector3(0.08, 0.08, 0.02))
 		eye.material_override = eye_mat
-		eye.position = Vector3(ex, 0.03, 0.22)
+		eye.position = Vector3(ex, 0.03, 0.24)
 		head.add_child(eye)
 	# Wind-up key on his back
 	key = Node3D.new()

@@ -132,7 +132,7 @@ func _build_environment() -> void:
 	env.background_color = Color(0.45, 0.62, 0.55)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	env.ambient_light_color = Color(0.55, 0.65, 0.55)
-	env.ambient_light_energy = 0.6
+	env.ambient_light_energy = 0.45
 	env.fog_enabled = true
 	env.fog_light_color = Color(0.45, 0.62, 0.55)
 	env.fog_density = 0.01
@@ -141,10 +141,17 @@ func _build_environment() -> void:
 	add_child(we)
 
 	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-55, 35, 0)
-	sun.light_energy = 1.1
+	sun.rotation_degrees = Vector3(-50, 35, 0)
+	sun.light_energy = 1.3
+	sun.light_color = Color(1.0, 0.96, 0.88)
 	sun.shadow_enabled = true
 	add_child(sun)
+	# Cool back light from the other side: rims the edges so characters read as round
+	var back := DirectionalLight3D.new()
+	back.rotation_degrees = Vector3(-25, 215, 0)
+	back.light_energy = 0.55
+	back.light_color = Color(0.65, 0.78, 1.0)
+	add_child(back)
 
 
 func _build_ground() -> void:

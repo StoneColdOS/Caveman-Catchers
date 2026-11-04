@@ -18,6 +18,7 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
   - Robots bob in sync to the beat, waddle, scissor-run with arms straight up, heads boing up on spring necks when startled
   - Trees sway to the beat
 - [x] Playtest: removed the old-film filter and the hero's outline (robots and world keep theirs). Rubber hose animation stays
+- [x] Playtest tweaks: no helmet, cigarette floats still at his mouth, thicker trailing smoke, more 3D shape on hero and robots (brow, muzzle, chest, pads, pouch flaps, soles; robot panels, rivets, bezel), no flat toon shading, cool back light for depth
 - [x] New hero from the user's sketch: lanky chimp with helmet, droopy eye + X eye, chewed ear, cigarette through the helmet, harness, pouches, satchel, knee pads, robot arm
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 

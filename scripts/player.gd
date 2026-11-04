@@ -1,6 +1,6 @@
 extends CharacterBody3D
 ## The hero: a lanky old space chimp from the user's sketch. Droopy eye, X eye, chewed
-## ear, cigarette poking through his helmet, harness, pouches, satchel, robot arm, net.
+## ear, a cigarette floating at his mouth, harness, pouches, satchel, robot arm, net.
 
 signal caught_one
 
@@ -48,6 +48,7 @@ var claw: MeshInstance3D
 var knee_pads: Array = []
 var right_band: MeshInstance3D
 var smoke_origin: Array = []
+var smoke_away: Array = []
 var walk_phase := 0.0
 var cig_tip: MeshInstance3D
 var smoke: Node3D
@@ -92,6 +93,17 @@ func _build_visual() -> void:
 	body_root = Node3D.new()
 	visual.add_child(body_root)
 	body_root.add_child(Util.mesh(Util.capsule(0.25, 0.62), suit, Vector3(0, 1.2, 0)))
+	# Chest, shoulders and hips give the torso some shape
+	var chest := Util.mesh(Util.sphere(0.2), suit.lightened(0.05), Vector3(0, 1.3, 0.1))
+	chest.scale = Vector3(1.25, 0.85, 0.65)
+	body_root.add_child(chest)
+	for side in [-1.0, 1.0]:
+		var pad := Util.mesh(Util.sphere(0.1), suit.darkened(0.12), Vector3(0.26 * side, 1.42, 0))
+		pad.scale = Vector3(1.1, 0.75, 1.1)
+		body_root.add_child(pad)
+	var hips := Util.mesh(Util.sphere(0.22), suit.darkened(0.08), Vector3(0, 0.96, 0))
+	hips.scale = Vector3(1.1, 0.55, 1.0)
+	body_root.add_child(hips)
 	# V harness straps meeting at the belt
 	for side in [-1.0, 1.0]:
 		var strap := Util.mesh(Util.box(Vector3(0.05, 0.5, 0.03)), gear, Vector3(0.08 * side, 1.2, 0.235))
@@ -101,17 +113,19 @@ func _build_visual() -> void:
 	body_root.add_child(Util.mesh(Util.box(Vector3(0.56, 0.07, 0.52)), dark, Vector3(0, 0.95, 0)))
 	for x in [-0.13, 0.0, 0.13]:
 		body_root.add_child(Util.mesh(Util.box(Vector3(0.1, 0.13, 0.07)), gear, Vector3(x, 0.93, 0.27)))
+		body_root.add_child(Util.mesh(Util.box(Vector3(0.11, 0.045, 0.085)), gear.darkened(0.2), Vector3(x, 0.99, 0.275)))  # pouch flap
 		body_root.add_child(Util.mesh(Util.box(Vector3(0.015, 0.06, 0.01)), dark, Vector3(x, 0.93, 0.31)))
 	# Satchel on his back with a cross strap
 	body_root.add_child(Util.mesh(Util.box(Vector3(0.34, 0.3, 0.14)), Color(0.45, 0.36, 0.24), Vector3(0, 1.12, -0.3)))
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.34, 0.08, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0, 1.24, -0.375)))
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.36, 0.12, 0.17)), Color(0.38, 0.3, 0.2), Vector3(0, 1.24, -0.31)))  # satchel flap
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.05, 0.05, 0.02)), Color(0.7, 0.62, 0.4), Vector3(0, 1.2, -0.4)))     # buckle
 	var cross := Util.mesh(Util.box(Vector3(0.04, 0.62, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0.0, 1.22, 0.24))
 	cross.rotation.z = -0.6
 	body_root.add_child(cross)
 	# Robot arm's shoulder joint (his left)
 	body_root.add_child(Util.mesh(Util.sphere(0.09), Color(0.91, 0.51, 0.23), Vector3(0.3, 1.38, 0)))
 
-	# Head on a springy pivot inside a bubble helmet
+	# Head on a springy pivot (no helmet)
 	head_pivot = Node3D.new()
 	head_pivot.position = Vector3(0, 1.5, 0)
 	body_root.add_child(head_pivot)
@@ -136,37 +150,47 @@ func _build_visual() -> void:
 		var stroke := Util.mesh(Util.box(Vector3(0.075, 0.016, 0.02)), ink, Vector3(0.07, 0.235, 0.255), false)
 		stroke.rotation.z = r
 		head_pivot.add_child(stroke)
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.025, 0.02, 0.02)), ink, Vector3(0.0, 0.17, 0.27), false))   # nose
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.09, 0.014, 0.02)), ink, Vector3(0.0, 0.12, 0.262), false))  # mouth
-	# Cigarette poking out through the helmet glass, glowing tip outside
-	var cig := Util.mesh(Util.box(Vector3(0.03, 0.03, 0.5)), Color(0.95, 0.93, 0.88), Vector3(-0.14, 0.08, 0.42))
-	cig.rotation = Vector3(0.25, -0.55, 0)
-	head_pivot.add_child(cig)
+	# Brow ridge and a muzzle that sticks out, so the face has depth
+	var brow := Util.mesh(Util.sphere(0.12), fur.darkened(0.1), Vector3(0, 0.29, 0.17))
+	brow.scale = Vector3(1.55, 0.32, 0.75)
+	head_pivot.add_child(brow)
+	var snout := Util.mesh(Util.sphere(0.11), face.lightened(0.06), Vector3(0, 0.12, 0.2))
+	snout.scale = Vector3(1.25, 0.8, 0.85)
+	head_pivot.add_child(snout)
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.03, 0.022, 0.02)), ink, Vector3(0.0, 0.17, 0.286), false))   # nose
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.1, 0.016, 0.02)), ink, Vector3(0.0, 0.1, 0.285), false))    # mouth
+	for side in [-1.0, 1.0]:  # cheeks
+		head_pivot.add_child(Util.mesh(Util.sphere(0.06), face.darkened(0.05), Vector3(0.12 * side, 0.15, 0.17)))
+	# Neck
+	var neck := CylinderMesh.new()
+	neck.top_radius = 0.09
+	neck.bottom_radius = 0.11
+	neck.height = 0.14
+	neck.radial_segments = 8
+	head_pivot.add_child(Util.mesh(neck, suit, Vector3(0, -0.03, 0)))
+	# Cigarette floats in front of his mouth, cartoon style. It's on the body, not the
+	# head, so it stays put while his head bobbles.
+	var cig := Util.mesh(Util.box(Vector3(0.028, 0.028, 0.24)), Color(0.95, 0.93, 0.88), Vector3(-0.13, 1.6, 0.37))
+	cig.rotation = Vector3(-0.12, -1.05, 0)
+	body_root.add_child(cig)
+	cig.add_child(Util.mesh(Util.box(Vector3(0.03, 0.03, 0.06)), Color(0.85, 0.6, 0.35), Vector3(0, 0, -0.09)))  # filter at his lips
 	cig_tip = MeshInstance3D.new()
-	cig_tip.mesh = Util.sphere(0.024)
+	cig_tip.mesh = Util.sphere(0.022)
 	cig_tip.material_override = Util.mat(Color(1.0, 0.45, 0.1), true)
-	cig_tip.position = Vector3(-0.27, 0.02, 0.62)
-	head_pivot.add_child(cig_tip)
-	var helmet := Util.mesh(Util.sphere(0.44), Color(0.8, 0.9, 0.95, 0.2), Vector3(0, 0.24, 0))
-	helmet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	head_pivot.add_child(helmet)
-	var collar := CylinderMesh.new()
-	collar.top_radius = 0.2
-	collar.bottom_radius = 0.22
-	collar.height = 0.07
-	collar.radial_segments = 10
-	head_pivot.add_child(Util.mesh(collar, metal, Vector3(0, -0.17, 0)))  # helmet collar
+	cig_tip.position = Vector3(0, 0, 0.125)
+	cig.add_child(cig_tip)
 	# Smoke trails up from the tip in world space
 	smoke = Node3D.new()
 	smoke.top_level = true
 	add_child(smoke)
-	for i in 8:
+	for i in 16:
 		var puff := MeshInstance3D.new()
-		puff.mesh = Util.sphere(0.06)
-		puff.material_override = Util.mat(Color(0.9, 0.92, 0.94, 0.45), true)
+		puff.mesh = Util.sphere(0.09)
+		puff.material_override = Util.mat(Color(0.88, 0.9, 0.92, 0.6), true)
 		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		smoke.add_child(puff)
 		smoke_origin.append(Vector3.ZERO)
+		smoke_away.append(Vector3.ZERO)
 
 	# Long, lanky noodle limbs
 	for side in [-1.0, 1.0]:
@@ -179,6 +203,7 @@ func _build_visual() -> void:
 		boot.scale = Vector3(1.0, 0.75, 1.6)
 		visual.add_child(boot)
 		boot.add_child(Util.mesh(Util.box(Vector3(0.17, 0.05, 0.14)), gear, Vector3(0, 0.13, -0.03)))  # boot band
+		boot.add_child(Util.mesh(Util.box(Vector3(0.21, 0.04 / 0.75, 0.36 / 1.6)), Color(0.08, 0.08, 0.08), Vector3(0, -0.085 / 0.75, 0)))  # sole
 		feet.append(boot)
 	right_arm = _make_noodle(12, 0.05, suit, Color())
 	robot_arm = _make_noodle(13, 0.055, metal, Color(0.32, 0.36, 0.4))  # accordion-striped spring arm
@@ -471,7 +496,7 @@ func make_noise(radius: float, color := Color(0, 0, 0, 0)) -> void:
 	get_tree().call_group("gatherers", "hear_noise", global_position, radius, self)
 
 
-## Puffs swirl slowly around inside the helmet; the cigarette tip pulses.
+## Thick smoke drifts up from the cigarette and trails behind him; the tip pulses.
 func _animate_smoke() -> void:
 	# Each puff leaves the cigarette tip, drifts up and grows, then starts over.
 	var t := Time.get_ticks_msec() * 0.001
@@ -479,13 +504,17 @@ func _animate_smoke() -> void:
 	var n := smoke.get_child_count()
 	for i in n:
 		var puff: MeshInstance3D = smoke.get_child(i)
-		var life := fposmod(t * 0.45 + float(i) / n, 1.0)
+		var life := fposmod(t * 0.32 + float(i) / n, 1.0)
 		if life < 0.05 or smoke_origin[i] == Vector3.ZERO:
 			smoke_origin[i] = tip
-		var o: Vector3 = smoke_origin[i]
-		puff.global_position = o + Vector3(sin(t * 2.0 + i) * 0.08 * life, life * 0.9, cos(t * 1.7 + i) * 0.06 * life)
-		puff.scale = Vector3.ONE * (0.5 + life * 1.6)
-		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.5 * (1.0 - life)
+			var away := tip - head_pivot.global_position
+			away.y = 0.0
+			smoke_away[i] = away.normalized() if away.length() > 0.01 else Vector3.ZERO
+		var o: Vector3 = smoke_origin[i] + smoke_away[i] * life * 0.45  # drift away from his face
+		# Puffs stay where they were puffed, so moving leaves a trail behind him
+		puff.global_position = o + Vector3(sin(t * 1.6 + i) * 0.14 * life, life * 1.3, cos(t * 1.3 + i) * 0.12 * life)
+		puff.scale = Vector3.ONE * (0.6 + life * 2.6)
+		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.62 * (1.0 - life * life)
 	var glow := 0.75 + 0.25 * sin(t * 3.0)
 	(cig_tip.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35 * glow + 0.1, 0.05)
 

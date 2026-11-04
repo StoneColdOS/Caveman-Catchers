@@ -7,7 +7,7 @@ const LAYER_PLAYER := 2
 const LAYER_CAVEMAN := 4
 
 
-## Art style: rubber hose (outlines, toon shading, old-film filter, extra bounce) or plain.
+## Art style: rubber hose (ink outlines on robots and props, extra bounce) or plain.
 static var rubber := true
 const BPM := 112.0               # everything bobs to this beat in rubber hose mode
 const OUTLINE := 0.05            # outline thickness in meters
@@ -29,9 +29,6 @@ static func set_rubber(tree: SceneTree, on: bool) -> void:
 	rubber = on
 	for n in tree.get_nodes_in_group("outlines"):
 		n.visible = on
-	for m in _shaded:
-		if is_instance_valid(m):
-			m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON if on else BaseMaterial3D.DIFFUSE_BURLEY
 	tree.call_group("style_listeners", "on_style_changed", on)
 
 
@@ -50,8 +47,7 @@ static func mat(color: Color, unshaded := false) -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	elif not unshaded:
-		m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
-		m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON if rubber else BaseMaterial3D.DIFFUSE_BURLEY
+		m.roughness = 0.85
 		_shaded.append(m)
 	return m
 
