@@ -7,8 +7,10 @@ extends CharacterBody3D
 ##                Lose him and he calms down. Chase him down, or dart him.
 ##   Darted:      staggers and yelps for a moment (nearby robots hear it), then drops.
 ##   Asleep:      lies flat ("Zzz"), easy to net, wakes up groggy.
+##   Held:        in the chimp's headlock, squirming while he unwinds its key. Powers down
+##                if he finishes; breaks free and runs if he stops.
 
-enum State { WANDER, FORAGE, SUSPICIOUS, INVESTIGATE, FLEE, CAUGHT, DROWSY, SLEEP }
+enum State { WANDER, FORAGE, SUSPICIOUS, INVESTIGATE, FLEE, CAUGHT, DROWSY, SLEEP, HELD }
 
 const Util := preload("res://scripts/util.gd")
 
@@ -67,6 +69,7 @@ var head_base_y := 0.0
 var head_pop := 0.0
 var head_pop_vel := 0.0
 var walk_phase := 0.0
+var hold_progress := 0.0
 var cone: MeshInstance3D
 var cone_mat: StandardMaterial3D
 var alert: Label3D
@@ -184,6 +187,9 @@ func _build_visual() -> void:
 
 func _physics_process(delta: float) -> void:
 	if state == State.CAUGHT:
+		return
+	if state == State.HELD:
+		_update_indicators(delta)  # the chimp moves us; we just squirm
 		return
 	var sees := can_see_player()
 	var move := Vector3.ZERO
@@ -393,7 +399,7 @@ func _hop(power: float) -> void:
 
 ## Called whenever something makes a sound.
 func hear_noise(pos: Vector3, radius: float, source: Node) -> void:
-	if source == self or state in [State.FLEE, State.CAUGHT, State.SUSPICIOUS, State.DROWSY, State.SLEEP]:
+	if source == self or state in [State.FLEE, State.CAUGHT, State.SUSPICIOUS, State.DROWSY, State.SLEEP, State.HELD]:
 		return
 	if global_position.distance_to(pos) > radius:
 		return
@@ -403,7 +409,7 @@ func hear_noise(pos: Vector3, radius: float, source: Node) -> void:
 
 
 func can_see_player() -> bool:
-	if player == null or state == State.SLEEP or state == State.DROWSY:
+	if player == null or state == State.SLEEP or state == State.DROWSY or state == State.HELD:
 		return false
 	var crouching: bool = player.crouching
 	var sight := _sight_range()
@@ -434,7 +440,45 @@ func is_caught() -> bool:
 
 
 func can_be_netted() -> bool:
-	return state != State.CAUGHT
+	return state != State.CAUGHT and state != State.HELD
+
+
+func is_held() -> bool:
+	return state == State.HELD
+
+
+## Was he already on to you when you grabbed him? (Alert robots take longer to wind down.)
+func is_alert() -> bool:
+	return state == State.FLEE or state == State.SUSPICIOUS
+
+
+## Grabbed in a headlock.
+func enter_headlock() -> void:
+	state = State.HELD
+	hold_progress = 0.0
+	velocity = Vector3.ZERO
+	collision_mask = Util.LAYER_WORLD
+	collision_layer = 0
+	head_pop_vel = 5.0 * maxf(Util.amp(), 0.6)  # "!!"
+
+
+## One crank of his key the wrong way.
+func wind_tap(progress: float) -> void:
+	hold_progress = progress
+	var tw := create_tween()
+	tw.tween_property(key, "rotation:z", key.rotation.z - 1.6, 0.08)
+	head.rotation = Vector3(randf_range(-0.3, 0.3), randf_range(-0.5, 0.5), randf_range(-0.3, 0.3))
+	if randf() < 0.4:
+		_spark()
+
+
+## He stopped cranking: wriggle loose and run.
+func break_free() -> void:
+	collision_layer = Util.LAYER_CAVEMAN
+	collision_mask = Util.LAYER_WORLD | Util.LAYER_PLAYER | Util.LAYER_CAVEMAN
+	state = State.SUSPICIOUS
+	last_seen = player.global_position
+	_start_flee()
 
 
 func is_asleep() -> bool:
@@ -519,7 +563,10 @@ func _update_indicators(delta: float) -> void:
 		State.SLEEP:
 			alert.text = "Zzz"
 			alert.modulate = Color(0.7, 0.85, 1)
-	cone.visible = state != State.SLEEP and state != State.DROWSY
+		State.HELD:
+			alert.text = "!!"
+			alert.modulate = Color(1, 0.55, 0.2)
+	cone.visible = state != State.SLEEP and state != State.DROWSY and state != State.HELD
 	# "?" grows as he gets closer to spotting you.
 	alert.pixel_size = 0.012 * (1.0 + awareness * 0.8) if state != State.FLEE else 0.02
 	if state == State.SLEEP:
@@ -539,7 +586,7 @@ func _update_indicators(delta: float) -> void:
 
 ## Broken-robot behavior: wind-up key spins, head twitches, sparks fly, eyes match mood.
 func _jank(delta: float) -> void:
-	var spin := 8.0 if state == State.FLEE else (0.0 if state == State.SLEEP else 2.0)
+	var spin := 8.0 if state == State.FLEE else (0.0 if state in [State.SLEEP, State.HELD] else 2.0)
 	key.rotation.z += spin * delta
 	var mood := Color(0.3, 1.0, 0.5)
 	match state:
@@ -551,6 +598,10 @@ func _jank(delta: float) -> void:
 			mood = Color(1.0, 0.5, 0.1) if randf() < 0.5 else Color(0.2, 0.2, 0.2)
 		State.SLEEP:
 			mood = Color(0.08, 0.1, 0.12)
+		State.HELD:
+			# Eyes flicker and dim as he winds down
+			var lit := (1.0 - hold_progress) * (0.6 + 0.4 * randf())
+			mood = Color(1.0, 0.45, 0.1) * lit
 	eye_mat.albedo_color = mood
 	glitch_timer -= delta
 	if glitch_timer <= 0.0 and state != State.SLEEP:
@@ -584,6 +635,14 @@ func _dance(delta: float) -> void:
 				arm_z[i] = side * (2.7 + 0.35 * sin(t * 24.0 + i * 2.0))  # arms straight up, flailing
 		State.SLEEP:
 			arm_z = [-0.3, 0.3]
+		State.HELD:
+			# Squirming, slower as he winds down
+			var fight := 1.0 - hold_progress
+			waddle = sin(t * 22.0) * 0.25 * fight
+			for i in 2:
+				var side := -1.0 if i == 0 else 1.0
+				arm_z[i] = side * (0.6 + (1.2 + 0.6 * sin(t * 20.0 + i * 2.0)) * fight)
+				leg_swing[i] = sin(t * 18.0 + i * PI) * 0.9 * fight
 		State.DROWSY:
 			waddle = sin(t * 6.0) * 0.45
 			arm_z = [-1.0 + sin(t * 5.0) * 0.4, 1.0 + sin(t * 5.0 + 1.0) * 0.4]

@@ -20,6 +20,10 @@ const GRAB_RANGE := 1.7      # he has to get right up to them
 const GRAB_COOLDOWN := 0.5
 const GRAB_TIME := 0.45      # lunge forward, then stuff it over his shoulder
 const LUNGE_SPEED := 4.5     # little burst forward on every grab, so chases are winnable
+const TAPS_UNAWARE := 4      # headlock: taps to wind down a robot you snuck up on
+const TAPS_ALERT := 9        # ...or one that was already on to you
+const BREAK_TIME := 1.0      # stop tapping this long and he wriggles free
+const HOLD_DECAY := 0.12     # wind-down progress slowly creeps back
 
 # How far each sound carries (meters).
 const RUN_NOISE := 9.0
@@ -42,6 +46,10 @@ var net_timer := 0.0
 var grab_timer := 0.0
 var satchel: Node3D
 var satchel_fill := 0
+var holding: Node = null
+var hold_needed := 0
+var hold_progress := 0.0
+var since_tap := 0.0
 var body_root: Node3D
 var head_pivot: Node3D
 var head_rot := Vector3.ZERO
@@ -349,7 +357,11 @@ func _animate(delta: float, on_floor: bool) -> void:
 		net_hand.z += sin(beat * 0.5) * 0.06 * amp
 		claw_hand.z -= sin(beat * 0.5) * 0.08 * amp
 		claw_hand.y += absf(sin(beat * 0.5)) * 0.06 * amp
-	if grab_timer > 0.0:
+	if holding:
+		# Arm around his neck, robot hand cranking the key on his back
+		net_hand = Vector3(-0.12, 1.3, 0.5)
+		claw_hand = Vector3(0.12, 1.02 + 0.05 * sin(t * 25.0), 0.42)
+	elif grab_timer > 0.0:
 		# Lunge the hand out, then swing it back over his shoulder to the satchel
 		var g := 1.0 - grab_timer / GRAB_TIME
 		net_hand = Vector3(-0.12, 1.15, 0.8) if g < 0.45 else Vector3(-0.15, 1.6, -0.35)
@@ -389,6 +401,8 @@ func _physics_process(delta: float) -> void:
 
 	# Movement relative to the camera.
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	if holding:
+		input = Vector2.ZERO  # can't move while holding one
 	var tilt := input.length()
 	var dir := Vector3.ZERO
 	if tilt > 0.15:
@@ -419,7 +433,7 @@ func _physics_process(delta: float) -> void:
 	velocity.x = move_toward(velocity.x, target.x, ACCEL * delta)
 	velocity.z = move_toward(velocity.z, target.z, ACCEL * delta)
 
-	if is_on_floor() and not crouching and Input.is_action_just_pressed("jump"):
+	if is_on_floor() and not crouching and holding == null and Input.is_action_just_pressed("jump"):
 		velocity.y = JUMP_VELOCITY
 		head_vel.x -= 6.0 * Util.amp()
 	elif is_on_floor() and velocity.y <= 0.0:
@@ -455,13 +469,18 @@ func _physics_process(delta: float) -> void:
 
 	# Net
 	net_timer -= delta
-	if net_timer <= 0.0 and Input.is_action_just_pressed("net"):
+	if Input.is_action_just_pressed("net") and (holding or net_timer <= 0.0):
 		grab()
+	if holding:
+		_update_hold(delta)
 	grab_timer = maxf(0.0, grab_timer - delta)
 
 
 ## Grab: lunge forward, snatch the nearest robot in front of him and stuff it in the satchel.
 func grab() -> void:
+	if holding:
+		_wind_tap()
+		return
 	net_timer = GRAB_COOLDOWN
 	grab_timer = GRAB_TIME
 	var fwd := visual.global_basis.z
@@ -482,9 +501,48 @@ func grab() -> void:
 			best = g
 			best_dist = dist
 	if best:
-		best.catch(satchel)
+		# Headlock. Now tap to unwind his key.
+		holding = best
+		hold_needed = TAPS_ALERT if best.is_alert() else TAPS_UNAWARE
+		hold_progress = 0.0
+		since_tap = 0.0
+		velocity.x = 0.0
+		velocity.z = 0.0
+		best.enter_headlock()
+
+
+## One tap while holding: crank his key the wrong way.
+func _wind_tap() -> void:
+	since_tap = 0.0
+	hold_progress = minf(1.0, hold_progress + 1.0 / hold_needed)
+	holding.wind_tap(hold_progress)
+	make_noise(3.0, Color(0.85, 0.85, 0.8, 0.7))  # clank, clank: quiet, but not silent
+	if hold_progress >= 0.999:
+		var r := holding
+		holding = null
+		r.catch(satchel)
 		caught_one.emit()
 		get_tree().create_timer(0.4).timeout.connect(_stuffed)
+
+
+## Keeps the held robot in front of him, and lets it go if he stops cranking.
+func _update_hold(delta: float) -> void:
+	if not is_instance_valid(holding):
+		holding = null
+		return
+	since_tap += delta
+	hold_progress = maxf(0.0, hold_progress - HOLD_DECAY * delta)
+	holding.hold_progress = hold_progress
+	var fwd := visual.global_basis.z
+	fwd.y = 0.0
+	fwd = fwd.normalized()
+	holding.global_position = global_position + fwd * 0.55
+	holding.heading = atan2(fwd.x, fwd.z)
+	holding.visual.rotation.y = holding.heading
+	if since_tap > BREAK_TIME:
+		var r := holding
+		holding = null
+		r.break_free()
 
 
 ## A robot just landed in the bag: it bulges a bit more and rattles.

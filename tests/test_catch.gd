@@ -36,7 +36,16 @@ func _run() -> void:
 	player.visual.rotation.y = atan2(g1.velocity.x, g1.velocity.z)
 	await _frames(1)
 	player.grab()
-	_check(g1.is_caught(), "You can chase down a runner and grab him")
+	_check(g1.is_held(), "Grabbing a runner puts him in a headlock")
+	_check(player.hold_needed == player.TAPS_ALERT, "A robot that spotted you takes more taps")
+	var start_pos: Vector3 = player.global_position
+	Input.action_press("move_forward")
+	await _frames(15)
+	Input.action_release("move_forward")
+	_check(player.global_position.distance_to(start_pos) < 0.3, "You can't walk away while holding one")
+	var taps := await _takedown(player)
+	_check(g1.is_caught(), "Tapping winds him down and he goes in the satchel")
+	_check(taps >= player.TAPS_ALERT and taps <= player.TAPS_ALERT + 2, "...after about %d taps (took %d)" % [player.TAPS_ALERT, taps])
 	await _frames(5)
 
 	# --- 2. Crouch-sneak up behind another one and grab him.
@@ -47,7 +56,9 @@ func _run() -> void:
 	await _frames(30)
 	_check(g2.state == g2.State.WANDER, "Gatherer doesn't notice you creeping up behind him")
 	player.grab()
-	_check(g2.is_caught(), "Grab catches the robot")
+	_check(g2.is_held() and player.hold_needed == player.TAPS_UNAWARE, "Sneak-grab: headlock that needs only a few taps")
+	await _takedown(player)
+	_check(g2.is_caught(), "Grab and wind down catches the robot")
 	_check(main.caught == 2, "Catch counter goes up")
 	await _frames(80)
 	_check(not is_instance_valid(g2), "Caught robot gets stuffed in the satchel")
@@ -85,6 +96,19 @@ func _run() -> void:
 	# --- 5. No tranq gun anymore: net only.
 	_check(not InputMap.has_action("tranq") and not InputMap.has_action("aim"), "Tranq gun and aiming are gone")
 	var g0 = gs[0]
+
+	# --- 5b. Stop tapping and he wriggles free and runs.
+	var g5 = gs[3]
+	player.global_position = g5.global_position + Vector3(0, 0, -1.2)
+	player.visual.rotation.y = 0.0
+	g5.state = g5.State.WANDER
+	await _frames(3)
+	player.grab()
+	_check(g5.is_held(), "Grab another one")
+	player.grab()
+	await _frames(int(player.BREAK_TIME * 60) + 20)
+	_check(not g5.is_held() and g5.is_fleeing(), "Stop tapping: he breaks free and runs")
+	_check(player.holding == null, "...and you can move again")
 
 	# --- 6. Lose a runner: he runs while he can see you, then calms down. No penalty.
 	player.global_position = Vector3(0, 0.1, 0)
@@ -139,6 +163,18 @@ func _freeze(g) -> void:
 	g.heading = 0.0
 	g.visual.rotation.y = 0.0
 	g.velocity = Vector3.ZERO
+
+
+## Grabs (if not already holding) and taps until the robot is wound down. Returns taps used.
+func _takedown(player) -> int:
+	var taps := 0
+	if player.holding == null:
+		player.grab()
+	while player.holding != null and taps < 30:
+		await physics_frame
+		player.grab()
+		taps += 1
+	return taps
 
 
 func _frames(n: int) -> void:

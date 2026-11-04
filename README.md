@@ -27,7 +27,7 @@ Placeholder shapes. A grumpy old space chimp hunts five janky robot monkeys and 
 | Sneak vs run | Light vs full stick tilt | Hold Ctrl to sneak |
 | Jump | A (bottom button) | Space |
 | Crouch | L1 or L2 | Shift or C |
-| Grab (stuff in satchel) | R1 or R2 | J or E |
+| Grab into a headlock, then tap to wind them down | R1 or R2 | J or E |
 | Restart | Start | Enter |
 
 ## Running it

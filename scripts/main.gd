@@ -18,6 +18,7 @@ var mode_label: Label
 var alert_label: Label
 var game_over := false
 var hint_label: Label
+var hold_bar: ProgressBar
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -268,6 +269,19 @@ func _build_hud() -> void:
 	alert_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(alert_label)
 
+	hold_bar = ProgressBar.new()
+	hold_bar.min_value = 0.0
+	hold_bar.max_value = 1.0
+	hold_bar.show_percentage = false
+	hold_bar.custom_minimum_size = Vector2(320, 22)
+	hold_bar.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	hold_bar.offset_left = -160
+	hold_bar.offset_right = 160
+	hold_bar.offset_top = 125
+	hold_bar.offset_bottom = 147
+	hold_bar.visible = false
+	layer.add_child(hold_bar)
+
 
 	hint_label = Label.new()
 	var hint := hint_label
@@ -294,9 +308,18 @@ func _build_hud() -> void:
 	_update_hud()
 
 
-## Spotted robots just run (Ape Escape style); the "!" over their heads is the only alarm.
+## Spotted robots just run (Ape Escape style). The top banner is only used for the headlock.
 func _update_alert() -> void:
-	pass
+	# Headlock prompt and wind-down meter
+	var held: bool = player != null and player.holding != null
+	if hold_bar:
+		hold_bar.visible = held
+	if held:
+		alert_label.text = "Tap GRAB to wind him down!"
+		alert_label.modulate = Color(1, 0.8, 0.3)
+		hold_bar.value = player.hold_progress
+	elif alert_label:
+		alert_label.text = ""
 
 
 func _on_caught() -> void:
