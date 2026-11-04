@@ -12,7 +12,7 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tried: escaped robots gone for good plus a 30s area alert. **Verdict:** didn't like the alert system either
 - [x] Back to Ape Escape style: spotted robots just run away and calm down if they lose you. The chase is the challenge
 - [x] Kept: real aiming with a red-on-target crosshair, delayed darts, 5 darts
-- [x] Rubber hose art style test (on by default, STYLE button / Select / T flips it off to compare):
+- [x] Rubber hose art style test (now **off by default**: the user prefers the calmer plain mode; STYLE button / Select / T flips it off to compare):
   - Ink outlines, toon shading, old-film filter (sepia, grain, flicker, scratches, vignette)
   - Noodle limbs, big shoes, white glove; bouncy idle and toe-tap on a shared beat; tiptoe sneak with hands up; windmill run; midair flail; springy head; big landing squash
   - Robots bob in sync to the beat, waddle, scissor-run with arms straight up, heads boing up on spring necks when startled

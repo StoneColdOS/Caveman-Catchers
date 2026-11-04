@@ -8,7 +8,7 @@ const LAYER_CAVEMAN := 4
 
 
 ## Art style: rubber hose (ink outlines on robots and props, extra bounce) or plain.
-static var rubber := true
+static var rubber := false        # plain (calmer) is the default; STYLE flips it
 const BPM := 112.0               # everything bobs to this beat in rubber hose mode
 const OUTLINE := 0.05            # outline thickness in meters
 static var _outline_mat: StandardMaterial3D
