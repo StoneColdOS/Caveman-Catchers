@@ -24,8 +24,12 @@ Grey boxes only. One caveman type (the Gatherer), three of them in a jungle clea
 |---|---|---|
 | Move | Left stick | WASD |
 | Camera | Right stick | Arrow keys |
-| Crouch | L1 or L2 | Shift or C |
-| Swing net | R1 or R2 | Space or J |
+| Sneak vs run | Light vs full stick tilt | Hold Ctrl to sneak |
+| Jump | A (bottom button) | Space |
+| Crouch | L1 | Shift or C |
+| Swing net | R1 | J or E |
+| Aim tranq gun | Hold L2 | Hold Q |
+| Fire dart | R2 | F or K |
 | Restart | Start | Enter |
 
 ## Running it

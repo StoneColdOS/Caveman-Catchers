@@ -31,8 +31,9 @@ Tagline: *Catch those damn dirty humans.*
 - **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
 - **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm
-- **Burrows (experiment):** spotted Gatherers run for a burrow and pop out of a different one later. User was unsure about this, so it's on trial
-- **Fail state:** health and game over, Ape Escape style
+- **Getting spotted (MGS radio-in):** the spotter runs to warn the tribe with a countdown. Stop him in time (net or dart) or it's game over
+- **Tranq gun:** hold L2 to aim over the shoulder, R2 to fire. No auto-aim. Darts take a moment to kick in and the target yelps. Very limited darts (3 for now)
+- **Fail state:** game over when a spotter warns the tribe. Health still planned for cavemen that fight back
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
 - **Engine:** Godot 4.7
 - **Scope rule:** start super small. One caveman type, one tool (net), one grey-box area. Grow only from what's fun.

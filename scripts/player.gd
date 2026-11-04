@@ -23,10 +23,8 @@ const RUN_NOISE := 9.0
 const SNEAK_NOISE := 2.5
 const LAND_NOISE := 7.0
 const TRANQ_NOISE := 8.0      # gunshot: loud
-const MAX_DARTS := 6
+const MAX_DARTS := 3
 const TRANQ_COOLDOWN := 0.5
-const AIM_ASSIST_DEG := 18.0
-const AIM_RANGE := 28.0
 const RUN_STEP := 0.32        # seconds between footsteps
 const SNEAK_STEP := 0.55
 
@@ -37,6 +35,8 @@ var was_on_floor := true
 var air_time := 0.0
 var darts := MAX_DARTS
 var tranq_timer := 0.0
+var aiming := false
+var arm: SpringArm3D
 var visual: Node3D
 var net_pivot: Node3D
 var camera_pivot: Node3D
@@ -111,7 +111,7 @@ func _build_camera() -> void:
 	camera_pivot = Node3D.new()
 	camera_pivot.position.y = 1.4
 	add_child(camera_pivot)
-	var arm := SpringArm3D.new()
+	arm = SpringArm3D.new()
 	arm.spring_length = 6.0
 	arm.collision_mask = Util.LAYER_WORLD
 	arm.margin = 0.3
@@ -124,11 +124,22 @@ func _build_camera() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	# Camera
+	# Aiming: hold L2 for an over-the-shoulder view with a crosshair.
+	var want_aim := Input.is_action_pressed("aim")
+	if want_aim and not aiming:
+		pitch = -0.08  # level out so the crosshair starts on the horizon
+	aiming = want_aim
+
+	# Camera (slower and finer while aiming)
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
-	yaw -= look.x * LOOK_SPEED * delta
-	pitch = clamp(pitch - look.y * LOOK_SPEED * delta, -1.2, 0.3)
+	var look_speed := LOOK_SPEED * (0.45 if aiming else 1.0)
+	yaw -= look.x * look_speed * delta
+	pitch = clamp(pitch - look.y * look_speed * delta, -0.7 if aiming else -1.2, 0.6 if aiming else 0.3)
 	camera_pivot.rotation = Vector3(pitch, yaw, 0)
+	var t := clampf(12.0 * delta, 0.0, 1.0)
+	arm.spring_length = lerp(arm.spring_length, 3.2 if aiming else 6.0, t)
+	arm.position.x = lerp(arm.position.x, 1.1 if aiming else 0.0, t)
+	camera.fov = lerp(camera.fov, 48.0 if aiming else 70.0, t)
 
 	# Movement relative to the camera.
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
@@ -145,7 +156,7 @@ func _physics_process(delta: float) -> void:
 		if crouching:
 			speed = CROUCH_SPEED
 			move_mode = "Creeping (silent)"
-		elif tilt < SNEAK_TILT or Input.is_action_pressed("walk"):
+		elif tilt < SNEAK_TILT or aiming or Input.is_action_pressed("walk"):
 			speed = SNEAK_SPEED
 			noise = SNEAK_NOISE
 			step = SNEAK_STEP
@@ -187,7 +198,10 @@ func _physics_process(delta: float) -> void:
 	else:
 		step_timer = 0.15
 
-	if dir != Vector3.ZERO:
+	if aiming:
+		var fwd := Basis(Vector3.UP, yaw) * Vector3(0, 0, -1)
+		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(fwd.x, fwd.z), 15.0 * delta)
+	elif dir != Vector3.ZERO:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(dir.x, dir.z), 12.0 * delta)
 	var target_scale := Vector3.ONE
 	if crouching:
@@ -228,29 +242,22 @@ func swing_net() -> void:
 			caught_one.emit()
 
 
-## Fires a dart where the camera is pointing, nudged onto a nearby caveman.
-## Returns true if a dart was fired.
+## Fires a dart. Aiming (L2): straight at the crosshair. Not aiming: straight ahead.
+## No auto-aim. Returns true if a dart was fired.
 func fire_tranq() -> bool:
 	if darts <= 0:
 		return false
 	darts -= 1
 	tranq_timer = TRANQ_COOLDOWN
 	var muzzle := global_position + Vector3.UP * 1.1
-	var aim := Basis(Vector3.UP, yaw) * Vector3(0, 0, -1)
-	var dir := aim
-	var best := AIM_ASSIST_DEG
-	for g in get_tree().get_nodes_in_group("gatherers"):
-		if not g.can_be_netted() or g.is_asleep():
-			continue
-		var to: Vector3 = g.global_position + Vector3.UP * 1.0 - muzzle
-		if to.length() > AIM_RANGE:
-			continue
-		var ang := rad_to_deg(aim.angle_to(Vector3(to.x, 0, to.z)))
-		if ang < best:
-			var q := PhysicsRayQueryParameters3D.create(muzzle, muzzle + to, Util.LAYER_WORLD)
-			if get_world_3d().direct_space_state.intersect_ray(q).is_empty():
-				best = ang
-				dir = to.normalized()
+	var dir := Basis(Vector3.UP, yaw) * Vector3(0, 0, -1)
+	if aiming:
+		var from := camera.global_position
+		var to := from - camera.global_basis.z * 60.0
+		var q := PhysicsRayQueryParameters3D.create(from, to, Util.LAYER_WORLD | Util.LAYER_CAVEMAN)
+		var hit := get_world_3d().direct_space_state.intersect_ray(q)
+		var target: Vector3 = hit.position if not hit.is_empty() else to
+		dir = (target - muzzle).normalized()
 	visual.rotation.y = atan2(dir.x, dir.z)
 	var dart := Node3D.new()
 	dart.set_script(DartScript)

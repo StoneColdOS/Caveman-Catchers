@@ -8,7 +8,6 @@ const PlayerScript := preload("res://scripts/player.gd")
 const GathererScript := preload("res://scripts/gatherer.gd")
 
 const ARENA := 50.0
-const BURROW_SPOTS := [Vector3(-19, 0, -19), Vector3(19, 0, -2), Vector3(-19, 0, 17), Vector3(7, 0, 21)]
 const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
 
 var player: CharacterBody3D
@@ -16,8 +15,9 @@ var caught := 0
 var count_label: Label
 var mode_label: Label
 var darts_label: Label
-var toast_label: Label
-var toast_timer := 0.0
+var alert_label: Label
+var crosshair: Label
+var game_over := false
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -27,7 +27,6 @@ func _ready() -> void:
 	rng.seed = 7
 	_build_environment()
 	_build_ground()
-	_build_burrows()
 	_build_cover()
 	_spawn_player()
 	_spawn_gatherers()
@@ -39,10 +38,9 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 	_update_debug()
-	if toast_timer > 0.0:
-		toast_timer -= delta
-		if toast_timer <= 0.0:
-			toast_label.text = ""
+	_update_alert()
+	if player and crosshair:
+		crosshair.visible = player.aiming and not game_over
 	if player and darts_label:
 		darts_label.text = "Darts: %d" % player.darts
 		darts_label.modulate = Color(1, 0.45, 0.35) if player.darts == 0 else Color(1, 0.9, 0.5)
@@ -140,29 +138,6 @@ func _build_ground() -> void:
 	_static_box(Vector3(2, 6, ARENA), Vector3(h + 1, 3, 0), wall)
 
 
-## Burrows: where spotted cavemen run to hide.
-func _build_burrows() -> void:
-	for spot in BURROW_SPOTS:
-		var b := Node3D.new()
-		b.add_to_group("burrows")
-		b.position = spot
-		add_child(b)
-		var hole := CylinderMesh.new()
-		hole.top_radius = 0.8
-		hole.bottom_radius = 0.8
-		hole.height = 0.04
-		hole.radial_segments = 10
-		b.add_child(Util.mesh(hole, Color(0.05, 0.04, 0.03), Vector3(0, 0.03, 0)))
-		var mound := TorusMesh.new()
-		mound.inner_radius = 0.75
-		mound.outer_radius = 1.3
-		mound.rings = 10
-		mound.ring_segments = 5
-		var m := Util.mesh(mound, Color(0.4, 0.28, 0.16), Vector3(0, 0.05, 0))
-		m.scale = Vector3(1, 0.5, 1)
-		b.add_child(m)
-
-
 ## Rocks and trees: things to sneak behind. They block caveman eyesight.
 func _build_cover() -> void:
 	for i in 14:
@@ -201,11 +176,7 @@ func _random_spot() -> Vector3:
 	# Keep the middle open near the player start, and away from walls.
 	while true:
 		var p := Vector3(rng.randf_range(-21, 21), 0, rng.randf_range(-21, 21))
-		var clear := p.length() > 5.0
-		for b in BURROW_SPOTS:
-			if p.distance_to(b) < 4.0:
-				clear = false
-		if clear:
+		if p.length() > 5.0:
 			return p
 	return Vector3.ZERO
 
@@ -239,7 +210,7 @@ func _spawn_gatherers() -> void:
 		g.set_script(GathererScript)
 		g.position = spot + Vector3(0, 0.1, 0)
 		add_child(g)
-		g.escaped.connect(_on_escaped)
+		g.warned_tribe.connect(_on_warned)
 
 
 func _build_hud() -> void:
@@ -267,19 +238,32 @@ func _build_hud() -> void:
 	darts_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(darts_label)
 
-	toast_label = Label.new()
-	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	toast_label.offset_top = 90
-	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	toast_label.add_theme_font_size_override("font_size", 30)
-	toast_label.add_theme_constant_override("outline_size", 8)
-	toast_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	toast_label.modulate = Color(1, 0.6, 0.4)
-	layer.add_child(toast_label)
+	alert_label = Label.new()
+	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	alert_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	alert_label.offset_top = 70
+	alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	alert_label.add_theme_font_size_override("font_size", 40)
+	alert_label.add_theme_constant_override("outline_size", 10)
+	alert_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(alert_label)
+
+	crosshair = Label.new()
+	crosshair.text = "+"
+	crosshair.set_anchors_preset(Control.PRESET_CENTER)
+	crosshair.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	crosshair.grow_vertical = Control.GROW_DIRECTION_BOTH
+	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	crosshair.add_theme_font_size_override("font_size", 48)
+	crosshair.add_theme_constant_override("outline_size", 6)
+	crosshair.add_theme_color_override("font_outline_color", Color.BLACK)
+	crosshair.modulate = Color(1, 0.9, 0.4)
+	crosshair.visible = false
+	layer.add_child(crosshair)
 
 	var hint := Label.new()
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Tranq: R2  Camera: R-stick  Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Camera: R-stick  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44
@@ -302,9 +286,33 @@ func _build_hud() -> void:
 	_update_hud()
 
 
-func _on_escaped() -> void:
-	toast_label.text = "A caveman dove into a burrow!"
-	toast_timer = 2.5
+## Shows the countdown for whoever is running to warn the tribe.
+func _update_alert() -> void:
+	if game_over or alert_label == null:
+		return
+	var shortest := INF
+	for g in get_tree().get_nodes_in_group("gatherers"):
+		if g.is_warning():
+			shortest = min(shortest, g.warn_timer)
+	if shortest == INF:
+		alert_label.text = ""
+		return
+	alert_label.text = "ALERT!  Stop him: %.1f" % shortest
+	var flash := 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.02)
+	alert_label.modulate = Color(1, 0.25 * flash, 0.2 * flash)
+
+
+## A caveman got away and warned the tribe.
+func _on_warned() -> void:
+	if game_over:
+		return
+	game_over = true
+	player.set_physics_process(false)
+	for g in get_tree().get_nodes_in_group("gatherers"):
+		g.set_physics_process(false)
+	alert_label.text = ""
+	message_label.modulate = Color(1, 0.4, 0.35)
+	message_label.text = "The tribe has been warned!\nGAME OVER\n\nPress Start to try again"
 
 
 func _on_caught() -> void:

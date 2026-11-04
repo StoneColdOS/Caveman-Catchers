@@ -33,13 +33,18 @@ Still one caveman type, still grey boxes.
 - [x] 5 cavemen
 - [x] Play it on the Thor. Verdict: way more challenging, crouching is a great addition, feels like a real Ape Escape x MGS crossover. Jumping onto alerted cavemen to catch them works
 
-## Prototype 3: stakes when spotted (current)
+## Prototype 3: stakes when spotted
 
-The jump-catch made getting spotted too forgiving. Two experiments, still one caveman type:
+- [x] Burrows: spotted cavemen hide in a burrow and pop out elsewhere. **Cut:** didn't like it
+- [x] Tranq gun with auto-aim and 6 darts. **Verdict:** way too easy, could tranq everyone
 
-- [x] Burrows: a spotted caveman runs for the safest burrow, dives in, and pops out of a different one about 10 seconds later
-- [x] Tranq gun (R2): fires where the camera points with light auto-aim, puts a caveman to sleep for 8 seconds so you can net him, but the shot is loud and you only get 6 darts
-- [ ] Play it: do burrows add tension or just annoy? Is the tranq worth its noise?
+## Prototype 4: the radio-in alert (current)
+
+- [x] Spotted = alert. The caveman yells and runs to warn the tribe with a 5 second countdown over his head and on screen. Net him or dart him in time, or it's game over
+- [x] Real aiming: hold L2 for an over-the-shoulder view with a crosshair, R2 fires. No auto-aim. Crouch moved to L1 only
+- [x] Delayed knockout: a dart takes 2 seconds to kick in. He staggers and yelps (nearby cavemen hear it), then sleeps 8 seconds
+- [x] 3 darts per round
+- [ ] Play it: is the alert scary but fair? Is aiming fun on the Thor's sticks? Are 3 darts the right number?
 
 Health, other caveman types and art wait until this feels good.
 

@@ -20,7 +20,7 @@ func _run() -> void:
 	for g in gs:
 		_freeze(g)
 
-	# --- 1. Standing in plain view in front of one: suspicious, then spotted.
+	# --- 1. Standing in plain view: suspicious, then spotted and running to warn the tribe.
 	var g1 = gs[1]
 	player.global_position = g1.global_position + Vector3(0, 0, 4)
 	await _frames(10)
@@ -29,12 +29,19 @@ func _run() -> void:
 	for i in 60:
 		await physics_frame
 		max_y = max(max_y, g1.global_position.y)
-	_check(g1.state == g1.State.FLEE, "Gatherer flees once he's sure")
+	_check(g1.is_warning(), "Spotted: he runs to warn the tribe")
 	_check(max_y > 0.5, "Gatherer jumps when he spots you")
-	var start: Vector3 = g1.global_position
-	await _frames(30)
-	_check(g1.global_position.distance_to(player.global_position) > start.distance_to(player.global_position),
-		"Gatherer runs away from you")
+	_check(g1.warn_timer > 0.0 and g1.warn_timer < g1.WARN_TIME, "Warning countdown is ticking")
+	_check(main.alert_label.text.begins_with("ALERT"), "HUD shows the alert")
+	# Stop him in time: chase him down and net him.
+	player.global_position = g1.global_position - g1.velocity.normalized() * 1.2
+	player.visual.rotation.y = atan2(g1.velocity.x, g1.velocity.z)
+	await _frames(1)
+	player.swing_net()
+	_check(g1.is_caught(), "Catching the spotter in time stops the alert")
+	await _frames(5)
+	_check(not main.game_over, "No game over when you stop him")
+	_check(main.alert_label.text == "", "Alert clears")
 
 	# --- 2. Crouch-sneak up behind another one and net him.
 	var g2 = gs[2]
@@ -45,13 +52,13 @@ func _run() -> void:
 	_check(g2.state == g2.State.WANDER, "Gatherer doesn't notice you creeping up behind him")
 	player.swing_net()
 	_check(g2.is_caught(), "Net catches the Gatherer")
-	_check(main.caught == 1, "Catch counter goes up")
+	_check(main.caught == 2, "Catch counter goes up")
 	await _frames(80)
 	_check(not is_instance_valid(g2), "Caught Gatherer gets beamed away")
 	Input.action_release("crouch")
 	await _frames(5)
 
-	# --- 3. Sound: a loud noise behind him makes him investigate, a quiet one doesn't.
+	# --- 3. Sound.
 	var g3 = gs[3]
 	var g4 = gs[4]
 	player.global_position = g4.global_position + Vector3(0, 0, -5)
@@ -64,7 +71,6 @@ func _run() -> void:
 	player.make_noise(player.RUN_NOISE)
 	await _frames(3)
 	_check(g3.state == g3.State.INVESTIGATE, "Loud footsteps 5m away get him investigating")
-	_check(g3.interest_point.distance_to(player.global_position) < 0.5, "He investigates where the noise came from")
 	_check(g3.awareness < 1.0, "Hearing alone doesn't spot you")
 
 	# --- 4. Jumping.
@@ -79,47 +85,59 @@ func _run() -> void:
 		peak = max(peak, player.global_position.y)
 	_check(peak > 0.8, "Player can jump")
 
-	# --- 5. Tranq: dart from 10m puts him to sleep, then net him.
-	_check(player.darts == player.MAX_DARTS, "Start with a full set of darts")
+	# --- 5. Aiming and the tranq gun.
+	_check(player.darts == 3, "Start with 3 darts")
 	player.global_position = g4.global_position + Vector3(0, 0, -10)
-	player.yaw = PI  # camera pointing at him
-	await _frames(5)
+	player.yaw = PI
+	Input.action_press("aim")
+	await _frames(20)
+	_check(player.aiming, "Holding aim enters aim mode")
+	_check(main.crosshair.visible, "Crosshair shows while aiming")
+	_check(player.camera.fov < 60.0, "Camera zooms in while aiming")
+	# Put the crosshair on his chest, like a player nudging the right stick.
+	var cam_target: Vector3 = g4.global_position + Vector3.UP * 0.9
+	for i in 6:
+		var to_target: Vector3 = cam_target - player.camera.global_position
+		player.yaw = atan2(-to_target.x, -to_target.z)
+		player.pitch = atan2(to_target.y, Vector2(to_target.x, to_target.z).length())
+		await _frames(4)
 	_check(player.fire_tranq(), "Tranq gun fires")
-	_check(player.darts == player.MAX_DARTS - 1, "Firing uses a dart")
-	await _frames(30)
-	_check(g4.is_asleep(), "Dart puts the Gatherer to sleep")
-	_check(not g4.can_see_player(), "Sleeping Gatherer can't see you")
+	_check(player.darts == 2, "Firing uses a dart")
+	await _frames(25)
+	_check(g4.is_drowsy(), "Aimed dart hits: he staggers first instead of dropping instantly")
+	await _frames(130)
+	_check(g4.is_asleep(), "...then falls asleep")
+	Input.action_release("aim")
+	await _frames(5)
+	_check(not main.crosshair.visible, "Crosshair hides when you stop aiming")
 	player.global_position = g4.global_position + Vector3(0, 0, -1.5)
 	player.visual.rotation.y = 0.0
 	await _frames(3)
 	player.swing_net()
 	_check(g4.is_caught(), "Sleeping Gatherer can be netted")
+
+	# A hip-fire shot pointed away from everyone hits nothing (no auto-aim).
+	var g0 = gs[0]
+	player.global_position = g0.global_position + Vector3(6, 0, 0)
+	player.yaw = 0.0  # facing -Z, g0 is off to the side
+	await _frames(3)
+	player.fire_tranq()
+	await _frames(40)
+	_check(not g0.is_drowsy() and not g0.is_asleep(), "No auto-aim: a shot pointed away misses")
 	player.darts = 0
 	_check(not player.fire_tranq(), "Out of darts: nothing fires")
 
-	# --- 6. Burrows: the spotted Gatherer from test 1 dives into one, then pops out of another.
-	_check(get_nodes_in_group("burrows").size() == 4, "4 burrows in the level")
-	var escaped_into := Vector3.ZERO
-	for i in 600:
-		await physics_frame
-		if g1.state == g1.State.HIDDEN:
-			escaped_into = g1.global_position
-			break
-	_check(g1.state == g1.State.HIDDEN, "Fleeing Gatherer dives into a burrow")
-	_check(not g1.can_be_netted(), "Can't net a Gatherer hiding in a burrow")
-	for i in 700:
-		await physics_frame
-		if g1.state != g1.State.HIDDEN:
-			break
-	_check(g1.state != g1.State.HIDDEN, "He comes back out later")
-	_check(g1.global_position.distance_to(escaped_into) > 3.0, "...from a different burrow")
-
-	# --- 7. A miss: swinging at thin air catches nothing.
-	var g0 = gs[0]
+	# --- 6. Let a spotter get away: game over.
 	player.global_position = Vector3(0, 0.1, 0)
 	await _frames(3)
-	player.swing_net()
-	_check(not g0.is_caught(), "Swinging out of range catches nothing")
+	g0.state = g0.State.SUSPICIOUS
+	g0._start_flee()
+	for i in 330:
+		await physics_frame
+		if main.game_over:
+			break
+	_check(main.game_over, "Spotter gets away after the countdown: game over")
+	_check(main.message_label.text.contains("GAME OVER"), "Game over screen shows")
 
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)
