@@ -26,11 +26,68 @@ func _ready() -> void:
 	_spawn_player()
 	_spawn_gatherers()
 	_build_hud()
+	_build_debug()
 
 
 func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
+	_update_debug()
+
+
+# --- Controller debug readout (top right). Remove once controls are solid on the Thor.
+
+var debug_label: Label
+var last_raw := "nothing yet"
+
+
+func _build_debug() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 10
+	add_child(layer)
+	debug_label = Label.new()
+	debug_label.anchor_left = 1.0
+	debug_label.anchor_right = 1.0
+	debug_label.offset_left = -460
+	debug_label.offset_right = -16
+	debug_label.offset_top = 12
+	debug_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	debug_label.add_theme_font_size_override("font_size", 16)
+	debug_label.add_theme_constant_override("outline_size", 5)
+	debug_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	debug_label.add_theme_color_override("font_color", Color(1, 1, 0.6))
+	layer.add_child(debug_label)
+
+
+## Remembers the last raw input event of any kind, so we can see what the Thor sends.
+func _input(event: InputEvent) -> void:
+	if event is InputEventJoypadMotion and abs(event.axis_value) < 0.3:
+		return
+	if event is InputEventMouseMotion:
+		return
+	last_raw = event.as_text()
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		last_raw += " (pad %d)" % event.device
+
+
+func _update_debug() -> void:
+	var pads := Input.get_connected_joypads()
+	var lines: PackedStringArray = []
+	lines.append("FPS %d" % Engine.get_frames_per_second())
+	if pads.is_empty():
+		lines.append("NO CONTROLLER DETECTED")
+	for id in pads:
+		lines.append("Pad %d: %s" % [id, Input.get_joy_name(id)])
+	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
+	lines.append("Move (%.1f, %.1f)  Look (%.1f, %.1f)" % [move.x, move.y, look.x, look.y])
+	var held: PackedStringArray = []
+	for a in ["crouch", "net", "restart"]:
+		if Input.is_action_pressed(a):
+			held.append(a)
+	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))
+	lines.append("Last input: " + last_raw)
+	debug_label.text = "\n".join(lines)
 
 
 func _build_environment() -> void:

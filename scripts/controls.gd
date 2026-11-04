@@ -14,6 +14,12 @@ static func setup() -> void:
 	_action("move_forward"); _key("move_forward", KEY_W);   _axis("move_forward", JOY_AXIS_LEFT_Y, -1.0)
 	_action("move_back");    _key("move_back", KEY_S);      _axis("move_back", JOY_AXIS_LEFT_Y, 1.0)
 
+	# D-pad as a backup for movement
+	_button("move_left", JOY_BUTTON_DPAD_LEFT)
+	_button("move_right", JOY_BUTTON_DPAD_RIGHT)
+	_button("move_forward", JOY_BUTTON_DPAD_UP)
+	_button("move_back", JOY_BUTTON_DPAD_DOWN)
+
 	_action("look_left");  _key("look_left", KEY_LEFT);   _axis("look_left", JOY_AXIS_RIGHT_X, -1.0)
 	_action("look_right"); _key("look_right", KEY_RIGHT); _axis("look_right", JOY_AXIS_RIGHT_X, 1.0)
 	_action("look_up");    _key("look_up", KEY_UP);       _axis("look_up", JOY_AXIS_RIGHT_Y, -1.0)
