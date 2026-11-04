@@ -1,7 +1,7 @@
 name: Build web version
 
 # Every push to main builds the web version and publishes it to GitHub Pages.
-# Play it on a phone: https://stonecoldos.github.io/caveman-catchers/
+# Play it on a phone: https://stonecoldos.github.io/Caveman-Catchers/
 
 on:
   push:

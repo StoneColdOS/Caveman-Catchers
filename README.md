@@ -36,7 +36,7 @@ Grey boxes only. One caveman type (the Gatherer), five of them in a jungle clear
 
 **On your Mac:** install [Godot 4.7](https://godotengine.org/download), open Godot, click **Import**, select `project.godot` in this folder, then press **F5**.
 
-**On your iPhone (or any phone):** open [stonecoldos.github.io/caveman-catchers](https://stonecoldos.github.io/caveman-catchers/) in Safari and turn the phone sideways. On-screen touch controls appear automatically. Every push rebuilds it.
+**On your iPhone (or any phone):** open [stonecoldos.github.io/Caveman-Catchers](https://stonecoldos.github.io/Caveman-Catchers/) in Safari and turn the phone sideways. On-screen touch controls appear automatically. Every push rebuilds it.
 
 **On the Thor:** every push to `main` automatically builds an APK. On the Thor, open the [latest build](https://github.com/StoneColdOS/caveman-catchers/releases/tag/latest-build), download `caveman-catchers.apk` and install it. New builds install right over the old one.
 
