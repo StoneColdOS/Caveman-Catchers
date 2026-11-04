@@ -17,7 +17,21 @@ The smallest playable thing. Grey shapes only.
 - [x] Crouching shrinks how far they can see you; rocks block their view
 - [x] Spotted Gatherers run away, then calm down if they lose you
 - [x] Net swing to catch, beam-away effect, catch counter
-- [ ] Play it on the Thor and decide: is sneaking up on one of these fun?
+- [x] Play it on the Thor. Verdict: works, but too easy and the cavemen felt too simple
+
+## Prototype 2: sound and smarter cavemen (current)
+
+Still one caveman type, still grey boxes.
+
+- [x] MGS-style movement: light stick tilt sneaks (quiet), full tilt runs (loud), crouch creeps (silent)
+- [x] Sound detection with visible rings: footsteps, jump landings, caveman yells
+- [x] Gatherers hear noises and walk over to investigate, then look around
+- [x] Lose sight of you and they check where they last saw you
+- [x] Foraging: head down and half blind, your window to sneak in
+- [x] Jumping for the player; cavemen hop when startled, leap and yell when they spot you, panic-hop when fleeing
+- [x] Spotted yells alert nearby cavemen
+- [x] 5 cavemen
+- [ ] Play it on the Thor: is it tense now? Too hard? Is the chase fun?
 
 Tranq, health and other caveman types wait until this feels good.
 

@@ -28,7 +28,8 @@ Tagline: *Catch those damn dirty humans.*
 - **Tools:**
   - **Tranq pistol:** safe from range, but loud. Can alert nearby cavemen
   - **Net:** silent, but you have to sneak in close
-- **Detection:** sight (vision cones) to start
+- **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
+- **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm
 - **Fail state:** health and game over, Ape Escape style
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
@@ -57,7 +58,6 @@ Each future type should have one clear reaction, so players can read a situation
 
 ## Ideas parked for later
 
-- **Sound detection** (running vs crawling vs standing still). Strong candidate for the first upgrade after the core loop works.
 - **Twist ending:** the "alien jungle planet" is actually a future Earth, revealed by a ruined landmark half-buried in the jungle.
 - **Visor that frosts during stealth** and clears in cutscenes.
 - **Camo:** chest dials on the suit that shift color to blend in (MGS3 camo index nod).

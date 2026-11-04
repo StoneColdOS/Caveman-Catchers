@@ -8,11 +8,12 @@ const PlayerScript := preload("res://scripts/player.gd")
 const GathererScript := preload("res://scripts/gatherer.gd")
 
 const ARENA := 50.0
-const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14)]
+const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
 
 var player: CharacterBody3D
 var caught := 0
 var count_label: Label
+var mode_label: Label
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -33,6 +34,11 @@ func _process(_delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 	_update_debug()
+	if player and mode_label:
+		mode_label.text = player.move_mode
+		var loud: bool = player.move_mode.begins_with("Running")
+		var silent: bool = player.move_mode.contains("silent")
+		mode_label.modulate = Color(1, 0.45, 0.35) if loud else (Color(0.6, 1, 0.7) if silent else Color.WHITE)
 
 
 # --- Controller debug readout (top right). Remove once controls are solid on the Thor.
@@ -207,8 +213,15 @@ func _build_hud() -> void:
 	count_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(count_label)
 
+	mode_label = Label.new()
+	mode_label.position = Vector2(24, 62)
+	mode_label.add_theme_font_size_override("font_size", 24)
+	mode_label.add_theme_constant_override("outline_size", 6)
+	mode_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(mode_label)
+
 	var hint := Label.new()
-	hint.text = "Move: L-stick   Camera: R-stick   Crouch: L1   Net: R1   Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)   Jump: A   Crouch: L1   Net: R1   Camera: R-stick   Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44

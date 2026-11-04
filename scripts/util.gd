@@ -49,3 +49,24 @@ static func sphere(radius: float) -> SphereMesh:
 	s.radial_segments = 8
 	s.rings = 4
 	return s
+
+
+## A ring that ripples out on the ground to show how far a sound carries.
+static func noise_ring(parent: Node, pos: Vector3, radius: float, color: Color) -> void:
+	var ring := MeshInstance3D.new()
+	var t := TorusMesh.new()
+	t.inner_radius = 0.93
+	t.outer_radius = 1.0
+	t.rings = 28
+	t.ring_segments = 3
+	ring.mesh = t
+	var m := mat(color, true)
+	ring.material_override = m
+	ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(ring)
+	ring.global_position = pos + Vector3.UP * 0.12
+	ring.scale = Vector3(0.3, 0.05, 0.3)
+	var tw := ring.create_tween()
+	tw.tween_property(ring, "scale", Vector3(radius, 0.05, radius), 0.45).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.parallel().tween_property(m, "albedo_color:a", 0.0, 0.45)
+	tw.tween_callback(ring.queue_free)

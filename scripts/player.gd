@@ -5,15 +5,30 @@ signal caught_one
 
 const Util := preload("res://scripts/util.gd")
 
-const WALK_SPEED := 6.5
-const CROUCH_SPEED := 2.6
+# MGS-style movement: how hard you push the stick decides how loud you are.
+const CROUCH_SPEED := 1.6     # creeping: silent
+const SNEAK_SPEED := 2.4      # light tilt: quiet footsteps
+const RUN_SPEED := 5.0        # full tilt: loud footsteps
+const SNEAK_TILT := 0.7       # stick tilt below this = sneaking
 const ACCEL := 30.0
 const GRAVITY := 20.0
+const JUMP_VELOCITY := 7.0
 const LOOK_SPEED := 2.6
 const NET_RANGE := 2.4
 const NET_COOLDOWN := 0.45
 
+# How far each sound carries (meters).
+const RUN_NOISE := 9.0
+const SNEAK_NOISE := 2.5
+const LAND_NOISE := 7.0
+const RUN_STEP := 0.32        # seconds between footsteps
+const SNEAK_STEP := 0.55
+
 var crouching := false
+var move_mode := "Standing still"
+var step_timer := 0.0
+var was_on_floor := true
+var air_time := 0.0
 var visual: Node3D
 var net_pivot: Node3D
 var camera_pivot: Node3D
@@ -107,23 +122,71 @@ func _physics_process(delta: float) -> void:
 	pitch = clamp(pitch - look.y * LOOK_SPEED * delta, -1.2, 0.3)
 	camera_pivot.rotation = Vector3(pitch, yaw, 0)
 
-	# Movement relative to the camera. Analog sticks give analog speed.
+	# Movement relative to the camera.
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var dir := Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y)
+	var tilt := input.length()
+	var dir := Vector3.ZERO
+	if tilt > 0.15:
+		dir = (Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y)).normalized()
 	crouching = Input.is_action_pressed("crouch")
-	var speed := CROUCH_SPEED if crouching else WALK_SPEED
+
+	var speed := 0.0
+	var noise := 0.0
+	var step := 0.0
+	if dir != Vector3.ZERO:
+		if crouching:
+			speed = CROUCH_SPEED
+			move_mode = "Creeping (silent)"
+		elif tilt < SNEAK_TILT or Input.is_action_pressed("walk"):
+			speed = SNEAK_SPEED
+			noise = SNEAK_NOISE
+			step = SNEAK_STEP
+			move_mode = "Sneaking (quiet)"
+		else:
+			speed = RUN_SPEED
+			noise = RUN_NOISE
+			step = RUN_STEP
+			move_mode = "Running (LOUD)"
+	else:
+		move_mode = "Crouching (silent)" if crouching else "Standing still"
+
 	var target := dir * speed
 	velocity.x = move_toward(velocity.x, target.x, ACCEL * delta)
 	velocity.z = move_toward(velocity.z, target.z, ACCEL * delta)
-	if is_on_floor():
+
+	if is_on_floor() and not crouching and Input.is_action_just_pressed("jump"):
+		velocity.y = JUMP_VELOCITY
+	elif is_on_floor() and velocity.y <= 0.0:
 		velocity.y = 0.0
 	else:
 		velocity.y -= GRAVITY * delta
 	move_and_slide()
 
-	if dir.length() > 0.1:
+	# Landing from a real jump makes a thud.
+	var on_floor := is_on_floor()
+	if on_floor and not was_on_floor and air_time > 0.25:
+		make_noise(LAND_NOISE)
+		visual.scale = Vector3(1.25, 0.7, 1.25)
+	air_time = 0.0 if on_floor else air_time + delta
+	was_on_floor = on_floor
+
+	# Footsteps
+	if on_floor and noise > 0.0:
+		step_timer -= delta
+		if step_timer <= 0.0:
+			make_noise(noise)
+			step_timer = step
+	else:
+		step_timer = 0.15
+
+	if dir != Vector3.ZERO:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(dir.x, dir.z), 12.0 * delta)
-	visual.scale.y = lerp(visual.scale.y, 0.6 if crouching else 1.0, 12.0 * delta)
+	var target_scale := Vector3.ONE
+	if crouching:
+		target_scale = Vector3(1, 0.6, 1)
+	elif not on_floor:
+		target_scale = Vector3(0.9, 1.15, 0.9)
+	visual.scale = visual.scale.lerp(target_scale, 12.0 * delta)
 
 	# Net
 	net_timer -= delta
@@ -150,6 +213,13 @@ func swing_net() -> void:
 		if dist < NET_RANGE and (dist < 0.9 or fwd.dot(to / dist) > 0.35):
 			g.catch()
 			caught_one.emit()
+
+
+## Sends a sound out. Any caveman inside the radius hears it.
+func make_noise(radius: float) -> void:
+	var color := Color(1, 0.4, 0.3, 0.8) if radius >= RUN_NOISE else Color(1, 1, 1, 0.7)
+	Util.noise_ring(get_parent(), global_position, radius, color)
+	get_tree().call_group("gatherers", "hear_noise", global_position, radius, self)
 
 
 ## Net held upright beside him when not swinging.

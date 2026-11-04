@@ -1,10 +1,12 @@
 extends RefCounted
 ## Sets up controls in code so they work on keyboard and on the Thor's gamepad.
 ##
-##   Move       left stick  / WASD
+##   Move       left stick  / WASD   (tilt lightly to sneak, all the way to run)
+##   Sneak-walk              / hold Ctrl
 ##   Camera     right stick / arrow keys
+##   Jump       A (bottom)  / Space
 ##   Crouch     L1 or L2    / Shift or C
-##   Swing net  R1 or R2    / Space or J
+##   Swing net  R1 or R2    / J or E
 ##   Restart    Start       / Enter
 
 
@@ -32,10 +34,17 @@ static func setup() -> void:
 	_axis("crouch", JOY_AXIS_TRIGGER_LEFT, 1.0)
 
 	_action("net")
-	_key("net", KEY_SPACE)
 	_key("net", KEY_J)
+	_key("net", KEY_E)
 	_button("net", JOY_BUTTON_RIGHT_SHOULDER)
 	_axis("net", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+
+	_action("jump")
+	_key("jump", KEY_SPACE)
+	_button("jump", JOY_BUTTON_A)
+
+	_action("walk")
+	_key("walk", KEY_CTRL)
 
 	_action("restart")
 	_key("restart", KEY_ENTER)

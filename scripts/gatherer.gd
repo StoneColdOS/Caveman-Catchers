@@ -1,22 +1,28 @@
 extends CharacterBody3D
 ## The Gatherer: the standard caveman.
-##   Calm: wanders around.
-##   Suspicious: sees you, stops and stares while his meter fills ("?").
-##   Spotted: runs away from you ("!"), calms down after losing you.
+##   Calm:        wanders, forages with his head down (half blind), stops to look around.
+##   Hears noise: hops, says "?", walks over to check it out, looks around.
+##   Sees you:    stares while his "?" grows. Lose him and he checks where he last saw you.
+##   Spotted:     leaps, yells (nearby cavemen hear it) and runs, panic-hopping.
 
-enum State { WANDER, SUSPICIOUS, FLEE, CAUGHT }
+enum State { WANDER, FORAGE, SUSPICIOUS, INVESTIGATE, FLEE, CAUGHT }
 
 const Util := preload("res://scripts/util.gd")
 
 const WANDER_SPEED := 1.6
-const FLEE_SPEED := 5.2          # a bit slower than the player, so a chase is winnable
+const INVESTIGATE_SPEED := 2.2
+const FLEE_SPEED := 4.6          # just under your run speed, so chases are tight
 const WANDER_RADIUS := 8.0
-const SIGHT_RANGE := 11.0
-const SIGHT_RANGE_CROUCH := 5.0  # crouching makes you much harder to see
-const FOV_DEG := 110.0
-const NOTICE_TIME := 1.2         # seconds in plain view (far away) before he spots you
-const CALM_RATE := 0.35
-const FLEE_TIME := 4.0
+const SIGHT_RANGE := 12.0
+const SIGHT_RANGE_CROUCH := 5.0
+const FORAGE_SIGHT := 0.4        # foraging: sees 40% as far
+const FOV_DEG := 120.0
+const FORAGE_FOV_DEG := 70.0
+const NOTICE_TIME := 0.8         # seconds in view (at max range) to spot you; faster up close
+const CALM_RATE := 0.25
+const HEAR_BUMP := 0.3
+const FLEE_TIME := 5.0
+const YELL_RADIUS := 10.0
 const GRAVITY := 20.0
 
 const CONE_CALM := Color(0.2, 1.0, 0.45, 0.3)
@@ -25,13 +31,23 @@ const CONE_SPOTTED := Color(1.0, 0.15, 0.1, 0.5)
 
 var state := State.WANDER
 var awareness := 0.0
+var scan := true                 # tests switch this off to freeze him in place
 var home := Vector3.ZERO
 var wander_target := Vector3.ZERO
-var wander_wait := 0.0
-var wander_give_up := 0.0
+var interest_point := Vector3.ZERO
+var last_seen := Vector3.ZERO
+var wait_timer := 0.0
+var turn_timer := 0.0
+var give_up := 0.0
+var state_timer := 0.0
+var look_timer := 0.0
 var flee_timer := 0.0
+var hop_timer := 0.0
+var heading := 0.0
+var turn_speed := 4.0
 var player: Node3D
 var visual: Node3D
+var torso: Node3D
 var cone: MeshInstance3D
 var cone_mat: StandardMaterial3D
 var alert: Label3D
@@ -54,24 +70,25 @@ func _ready() -> void:
 
 	_build_visual()
 	_pick_wander_target()
-	visual.rotation.y = randf() * TAU
+	heading = randf() * TAU
+	visual.rotation.y = heading
 
 
 func _build_visual() -> void:
 	visual = Node3D.new()
 	add_child(visual)
+	torso = Node3D.new()
+	torso.position.y = 0.2
+	visual.add_child(torso)
 	var fur := Color(0.45, 0.28, 0.16)
 	var skin := Color(0.85, 0.66, 0.5)
-	# Fur tunic body
-	visual.add_child(Util.mesh(Util.capsule(0.42, 1.2), fur, Vector3(0, 0.65, 0)))
-	# Head, big shaggy hair, and the all-important unibrow
-	visual.add_child(Util.mesh(Util.sphere(0.27), skin, Vector3(0, 1.45, 0.05)))
-	visual.add_child(Util.mesh(Util.sphere(0.32), Color(0.2, 0.13, 0.08), Vector3(0, 1.55, -0.08)))
-	visual.add_child(Util.mesh(Util.box(Vector3(0.36, 0.07, 0.06)), Color(0.15, 0.1, 0.06), Vector3(0, 1.53, 0.3)))
-	# Nose, so you can tell which way he's facing
-	visual.add_child(Util.mesh(Util.box(Vector3(0.1, 0.1, 0.12)), skin.darkened(0.15), Vector3(0, 1.43, 0.33)))
+	var y := -0.2
+	torso.add_child(Util.mesh(Util.capsule(0.42, 1.2), fur, Vector3(0, 0.65 + y, 0)))
+	torso.add_child(Util.mesh(Util.sphere(0.27), skin, Vector3(0, 1.45 + y, 0.05)))
+	torso.add_child(Util.mesh(Util.sphere(0.32), Color(0.2, 0.13, 0.08), Vector3(0, 1.55 + y, -0.08)))
+	torso.add_child(Util.mesh(Util.box(Vector3(0.36, 0.07, 0.06)), Color(0.15, 0.1, 0.06), Vector3(0, 1.53 + y, 0.3)))
+	torso.add_child(Util.mesh(Util.box(Vector3(0.1, 0.1, 0.12)), skin.darkened(0.15), Vector3(0, 1.43 + y, 0.33)))
 
-	# Vision cone on the ground, rotates with him
 	cone = MeshInstance3D.new()
 	cone.mesh = _cone_mesh(SIGHT_RANGE, deg_to_rad(FOV_DEG))
 	cone_mat = Util.mat(CONE_CALM, true)
@@ -80,7 +97,6 @@ func _build_visual() -> void:
 	cone.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	visual.add_child(cone)
 
-	# "?" and "!" above his head
 	alert = Label3D.new()
 	alert.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	alert.font_size = 96
@@ -94,68 +110,209 @@ func _build_visual() -> void:
 func _physics_process(delta: float) -> void:
 	if state == State.CAUGHT:
 		return
-
 	var sees := can_see_player()
 	var move := Vector3.ZERO
-
 	match state:
-		State.WANDER, State.SUSPICIOUS:
-			if sees:
-				awareness += delta / NOTICE_TIME * _closeness_boost()
-				state = State.SUSPICIOUS
-				_turn_toward(player.global_position, 2.5, delta)
-			else:
-				awareness = max(0.0, awareness - CALM_RATE * delta)
-				if awareness == 0.0:
-					state = State.WANDER
-			if awareness >= 1.0:
-				_start_flee()
-			elif state == State.WANDER:
-				move = _wander(delta)
+		State.WANDER:
+			move = _do_wander(delta, sees)
+		State.FORAGE:
+			_do_forage(delta, sees)
+		State.SUSPICIOUS:
+			_do_suspicious(delta, sees)
+		State.INVESTIGATE:
+			move = _do_investigate(delta, sees)
 		State.FLEE:
-			if sees:
-				flee_timer = FLEE_TIME
-			else:
-				flee_timer -= delta
-			if flee_timer <= 0.0:
-				# Lost you. Stays jumpy for a bit.
-				state = State.SUSPICIOUS
-				awareness = 0.6
-			else:
-				var away := global_position - player.global_position
-				away.y = 0.0
-				move = away.normalized() * FLEE_SPEED
-				_turn_toward(global_position + away, 10.0, delta)
+			move = _do_flee(delta, sees)
 
 	velocity.x = move.x
 	velocity.z = move.z
-	if is_on_floor():
+	if is_on_floor() and velocity.y <= 0.0:
 		velocity.y = 0.0
 	else:
 		velocity.y -= GRAVITY * delta
 	move_and_slide()
-	_update_indicators()
+	visual.rotation.y = lerp_angle(visual.rotation.y, heading, clamp(turn_speed * delta, 0.0, 1.0))
+	_update_indicators(delta)
+
+
+# --- States
+
+func _do_wander(delta: float, sees: bool) -> Vector3:
+	awareness = max(0.0, awareness - CALM_RATE * delta)
+	if sees:
+		_become_suspicious(true)
+		return Vector3.ZERO
+	if wait_timer > 0.0:
+		# Standing around, glancing in different directions.
+		wait_timer -= delta
+		turn_timer -= delta
+		turn_speed = 3.0
+		if scan and turn_timer <= 0.0:
+			heading += randf_range(-1.8, 1.8)
+			turn_timer = randf_range(0.8, 1.6)
+		if wait_timer <= 0.0:
+			_pick_wander_target()
+		return Vector3.ZERO
+	var to := _flat(wander_target - global_position)
+	give_up -= delta
+	if to.length() < 0.5 or give_up <= 0.0:
+		if randf() < 0.5:
+			state = State.FORAGE
+			state_timer = randf_range(3.0, 5.0)
+		else:
+			wait_timer = randf_range(2.0, 4.0)
+			turn_timer = 0.5
+		return Vector3.ZERO
+	_face(wander_target, 4.0)
+	return to.normalized() * WANDER_SPEED
+
+
+func _do_forage(delta: float, sees: bool) -> void:
+	awareness = max(0.0, awareness - CALM_RATE * delta)
+	if sees:
+		_become_suspicious(true)
+		return
+	state_timer -= delta
+	if state_timer <= 0.0:
+		state = State.WANDER
+		wait_timer = 1.5
+		turn_timer = 0.3
+
+
+func _do_suspicious(delta: float, sees: bool) -> void:
+	if sees:
+		awareness += delta / NOTICE_TIME * _closeness_boost()
+		last_seen = player.global_position
+		_face(last_seen, 3.0)
+		if awareness >= 1.0:
+			_start_flee()
+	else:
+		# Lost you. Go check where you were.
+		_start_investigate(last_seen, false)
+
+
+func _do_investigate(delta: float, sees: bool) -> Vector3:
+	if sees:
+		_become_suspicious(false)
+		return Vector3.ZERO
+	awareness = max(0.15, awareness - CALM_RATE * 0.3 * delta)
+	if state_timer > 0.0:
+		# Startled pause, staring toward the sound.
+		state_timer -= delta
+		_face(interest_point, 5.0)
+		return Vector3.ZERO
+	var to := _flat(interest_point - global_position)
+	if to.length() > 1.0 and give_up > 0.0:
+		give_up -= delta
+		_face(interest_point, 4.0)
+		return to.normalized() * INVESTIGATE_SPEED
+	# Arrived: look around, then give up.
+	look_timer -= delta
+	turn_timer -= delta
+	turn_speed = 3.0
+	if turn_timer <= 0.0:
+		heading += randf_range(-2.0, 2.0)
+		turn_timer = 0.8
+	if look_timer <= 0.0:
+		state = State.WANDER
+		awareness = min(awareness, 0.3)
+		wait_timer = 0.0
+		_pick_wander_target()
+	return Vector3.ZERO
+
+
+func _do_flee(delta: float, sees: bool) -> Vector3:
+	if sees:
+		flee_timer = FLEE_TIME
+		last_seen = player.global_position
+	else:
+		flee_timer -= delta
+	if flee_timer <= 0.0:
+		awareness = 0.6
+		_start_investigate(last_seen, false)
+		return Vector3.ZERO
+	# Panic hops while running.
+	hop_timer -= delta
+	if hop_timer <= 0.0 and is_on_floor():
+		velocity.y = 4.0
+		hop_timer = randf_range(0.8, 1.6)
+	var away := _flat(global_position - player.global_position)
+	_face(global_position + away, 10.0)
+	return away.normalized() * FLEE_SPEED
+
+
+func _become_suspicious(hop: bool) -> void:
+	state = State.SUSPICIOUS
+	last_seen = player.global_position
+	if hop:
+		_hop(3.5)
+
+
+func _start_investigate(point: Vector3, hop: bool) -> void:
+	state = State.INVESTIGATE
+	interest_point = point
+	state_timer = 0.6
+	look_timer = 3.0
+	turn_timer = 0.5
+	give_up = 8.0
+	if hop:
+		_hop(3.5)
+
+
+func _start_flee() -> void:
+	state = State.FLEE
+	awareness = 1.0
+	flee_timer = FLEE_TIME
+	hop_timer = 0.9
+	_hop(6.0)
+	# Yell! Nearby cavemen hear it and come check it out.
+	Util.noise_ring(get_parent(), global_position, YELL_RADIUS, Color(1, 0.2, 0.15, 0.8))
+	get_tree().call_group("gatherers", "hear_noise", global_position, YELL_RADIUS, self)
+
+
+func _hop(power: float) -> void:
+	if is_on_floor():
+		velocity.y = power
+
+
+# --- Senses
+
+## Called whenever something makes a sound.
+func hear_noise(pos: Vector3, radius: float, source: Node) -> void:
+	if source == self or state == State.FLEE or state == State.CAUGHT or state == State.SUSPICIOUS:
+		return
+	if global_position.distance_to(pos) > radius:
+		return
+	var was_calm := state == State.WANDER or state == State.FORAGE
+	awareness = min(0.95, awareness + HEAR_BUMP)
+	_start_investigate(pos, was_calm)
 
 
 func can_see_player() -> bool:
 	if player == null:
 		return false
 	var crouching: bool = player.crouching
-	var sight := SIGHT_RANGE_CROUCH if crouching else SIGHT_RANGE
+	var sight := _sight_range()
+	var fov := FORAGE_FOV_DEG if state == State.FORAGE else FOV_DEG
 	var eye := global_position + Vector3.UP * 1.45
 	var target := player.global_position + Vector3.UP * (0.6 if crouching else 1.2)
-	var to := target - eye
-	var flat := Vector3(to.x, 0, to.z)
+	var flat := _flat(target - eye)
 	if flat.length() > sight:
 		return false
 	if flat.length() > 1.2:
-		var fwd := visual.global_basis.z
-		fwd.y = 0.0
-		if rad_to_deg(fwd.normalized().angle_to(flat.normalized())) > FOV_DEG * 0.5:
+		var fwd := _flat(visual.global_basis.z)
+		if rad_to_deg(fwd.normalized().angle_to(flat.normalized())) > fov * 0.5:
 			return false
 	# Rocks and trees block his view
 	var q := PhysicsRayQueryParameters3D.create(eye, target, Util.LAYER_WORLD)
 	return get_world_3d().direct_space_state.intersect_ray(q).is_empty()
+
+
+func _sight_range() -> float:
+	var sight := SIGHT_RANGE_CROUCH if player.crouching else SIGHT_RANGE
+	if state == State.FORAGE:
+		sight *= FORAGE_SIGHT
+	return sight
 
 
 func is_caught() -> bool:
@@ -168,8 +325,6 @@ func catch() -> void:
 	collision_mask = 0
 	alert.text = ""
 	cone.visible = false
-
-	# Beam him away
 	var beam := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.7
@@ -180,7 +335,6 @@ func catch() -> void:
 	beam.material_override = Util.mat(Color(0.5, 0.95, 1.0, 0.45), true)
 	beam.position.y = 15.0
 	add_child(beam)
-
 	var tw := create_tween()
 	tw.tween_property(visual, "position:y", 4.0, 0.7).set_ease(Tween.EASE_IN)
 	tw.parallel().tween_property(visual, "scale", Vector3(0.1, 2.0, 0.1), 0.7).set_ease(Tween.EASE_IN)
@@ -188,53 +342,39 @@ func catch() -> void:
 	tw.tween_callback(queue_free)
 
 
-func _start_flee() -> void:
-	awareness = 1.0
-	state = State.FLEE
-	flee_timer = FLEE_TIME
+# --- Helpers
 
-
-## Closer means he notices you faster (up to 3x).
 func _closeness_boost() -> float:
 	var dist := global_position.distance_to(player.global_position)
 	return lerp(3.0, 1.0, clamp(dist / SIGHT_RANGE, 0.0, 1.0))
-
-
-func _wander(delta: float) -> Vector3:
-	if wander_wait > 0.0:
-		wander_wait -= delta
-		return Vector3.ZERO
-	var to := wander_target - global_position
-	to.y = 0.0
-	wander_give_up -= delta
-	if to.length() < 0.5 or wander_give_up <= 0.0:
-		wander_wait = randf_range(1.0, 3.0)
-		_pick_wander_target()
-		return Vector3.ZERO
-	_turn_toward(wander_target, 4.0, delta)
-	return to.normalized() * WANDER_SPEED
 
 
 func _pick_wander_target() -> void:
 	var a := randf() * TAU
 	var r := randf_range(2.0, WANDER_RADIUS)
 	wander_target = home + Vector3(cos(a) * r, 0, sin(a) * r)
-	wander_give_up = 8.0
+	give_up = 8.0
 
 
-func _turn_toward(point: Vector3, speed: float, delta: float) -> void:
-	var to := point - global_position
-	if Vector2(to.x, to.z).length() < 0.01:
-		return
-	visual.rotation.y = lerp_angle(visual.rotation.y, atan2(to.x, to.z), clamp(speed * delta, 0.0, 1.0))
+func _face(point: Vector3, speed: float) -> void:
+	var to := _flat(point - global_position)
+	if to.length() > 0.01:
+		heading = atan2(to.x, to.z)
+	turn_speed = speed
 
 
-func _update_indicators() -> void:
+static func _flat(v: Vector3) -> Vector3:
+	return Vector3(v.x, 0, v.z)
+
+
+func _update_indicators(delta: float) -> void:
+	var foraging := state == State.FORAGE
 	match state:
-		State.WANDER:
+		State.WANDER, State.FORAGE:
 			cone_mat.albedo_color = CONE_CALM
-			alert.text = ""
-		State.SUSPICIOUS:
+			alert.text = "..." if foraging else ""
+			alert.modulate = Color(0.85, 1, 0.85)
+		State.SUSPICIOUS, State.INVESTIGATE:
 			cone_mat.albedo_color = CONE_SUSPICIOUS
 			alert.text = "?"
 			alert.modulate = Color(1, 0.85, 0.2)
@@ -242,15 +382,21 @@ func _update_indicators() -> void:
 			cone_mat.albedo_color = CONE_SPOTTED
 			alert.text = "!"
 			alert.modulate = Color(1, 0.3, 0.25)
-	# The cone shrinks when you crouch, so you can see how close you can get.
-	var reach := (SIGHT_RANGE_CROUCH if player.crouching else SIGHT_RANGE) / SIGHT_RANGE
-	cone.scale = Vector3(reach, 1, reach)
+	# "?" grows as he gets closer to spotting you.
+	alert.pixel_size = 0.012 * (1.0 + awareness * 0.8) if state != State.FLEE else 0.02
+	# Head down while foraging.
+	var lean := 0.7 + sin(Time.get_ticks_msec() * 0.012) * 0.12 if foraging else 0.0
+	torso.rotation.x = lerp(torso.rotation.x, lean, clamp(10.0 * delta, 0.0, 1.0))
+	# The cone shows how far he can actually see you right now.
+	var reach := _sight_range() / SIGHT_RANGE
+	cone.scale = cone.scale.lerp(Vector3(reach, 1, reach), clamp(8.0 * delta, 0.0, 1.0))
+	cone.rotation.y = 0.0
 
 
 ## A flat fan shape pointing along +Z.
 static func _cone_mesh(length: float, angle: float) -> ArrayMesh:
 	var verts := PackedVector3Array()
-	var steps := 12
+	var steps := 14
 	for i in steps:
 		var a0 := -angle / 2.0 + angle * i / steps
 		var a1 := -angle / 2.0 + angle * (i + 1) / steps
