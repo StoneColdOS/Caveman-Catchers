@@ -16,7 +16,7 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
   - Ink outlines, toon shading, old-film filter (sepia, grain, flicker, scratches, vignette)
   - Noodle limbs, big shoes, white glove; bouncy idle and toe-tap on a shared beat; tiptoe sneak with hands up; windmill run; midair flail; springy head; big landing squash
   - Robots bob in sync to the beat, waddle, scissor-run with arms straight up, heads boing up on spring necks when startled
-  - Trees sway to the beat
+  - Trees swayed to the beat. **Removed:** too distracting, trees stay still
 - [x] Playtest: removed the old-film filter and the hero's outline (robots and world keep theirs). Rubber hose animation stays
 - [x] Net replaced: grab robots and stuff them in the satchel (R1/R2). Short range with a forward lunge; the satchel bulges and rattles as it fills
 - [x] Pixel low-poly look from the user's reference: faceted flat shading on every shape, mottled 16x16 pixel textures (nearest filtering, triplanar)

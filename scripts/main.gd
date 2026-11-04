@@ -44,7 +44,6 @@ func _process(delta: float) -> void:
 	_update_alert()
 	if Input.is_action_just_pressed("style"):
 		Util.set_rubber(get_tree(), not Util.rubber)
-	_dance_trees()
 	if player and mode_label:
 		mode_label.text = player.move_mode
 		var loud: bool = player.move_mode.begins_with("Running")
@@ -197,8 +196,6 @@ func _tree(p: Vector3) -> void:
 	trunk.radial_segments = 6
 	body.add_child(Util.mesh(trunk, Color(0.35, 0.24, 0.15), Vector3(0, trunk_h / 2.0, 0)))
 	var canopy := Util.mesh(Util.sphere(rng.randf_range(1.6, 2.4)), Color(0.18, 0.42, 0.18), Vector3(0, trunk_h + 0.6, 0))
-	canopy.set_meta("phase", rng.randf() * 0.6)
-	canopy.add_to_group("dancers")
 	body.add_child(canopy)
 
 
@@ -295,17 +292,6 @@ func _build_hud() -> void:
 	layer.add_child(message_label)
 
 	_update_hud()
-
-
-## Tree tops squash and sway to the beat in rubber hose mode.
-func _dance_trees() -> void:
-	var b := Util.beat()
-	var a := 0.07 if Util.rubber else 0.0
-	for c in get_tree().get_nodes_in_group("dancers"):
-		var ph: float = c.get_meta("phase")
-		var bounce := absf(sin(b * 0.5 + ph))
-		c.scale = Vector3(1.0 + a * (1.0 - bounce), 1.0 - a + 2.0 * a * bounce, 1.0 + a * (1.0 - bounce))
-		c.rotation.z = sin(b * 0.25 + ph * 3.0) * a * 1.5
 
 
 ## Spotted robots just run (Ape Escape style); the "!" over their heads is the only alarm.
