@@ -11,13 +11,13 @@ Built in Godot 4.7, targeting the AYN Thor handheld.
 
 ![Prototype 1](docs/screenshots/prototype1.png)
 
-## Current state: Prototype 1
+## Current state: Prototype 4
 
-Grey boxes only. One caveman type (the Gatherer), three of them in a jungle clearing, and a net.
+Grey boxes only. One caveman type (the Gatherer), five of them in a jungle clearing, a net and a tranq gun.
 
 - **Green cone:** he's calm and hasn't seen you
 - **Yellow "?":** he sees you and is getting suspicious. Duck out of sight and he'll calm down
-- **Red "!":** he's spotted you and runs. Chase him down or wait for him to calm down
+- **Red "! 5":** he spotted you and is running to warn the tribe. Net him or dart him before the countdown hits zero, or it's game over
 - Crouching shrinks how far they can see you. Rocks and trees block their view.
 
 | | Thor / gamepad | Keyboard |
