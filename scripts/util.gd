@@ -12,6 +12,38 @@ static var rubber := true
 const BPM := 112.0               # everything bobs to this beat in rubber hose mode
 const OUTLINE := 0.05            # outline thickness in meters
 static var _outline_mat: StandardMaterial3D
+const PIXEL_VARIANTS := 4
+const PIXEL_SCALE := 1.4          # one texture tile covers about 0.7 m, so a pixel is ~4 cm
+static var _pixel_textures: Array = []
+
+
+## Small grayscale-ish noise texture in 2x2 blocks with slight warm/cool tint shifts,
+## like hand-painted low-res textures. Multiplies the material color.
+static func _pixel_texture(variant: int) -> ImageTexture:
+	if _pixel_textures.is_empty():
+		for v in PIXEL_VARIANTS:
+			var rng := RandomNumberGenerator.new()
+			rng.seed = 1000 + v
+			var img := Image.create(16, 16, false, Image.FORMAT_RGB8)
+			for by in 8:
+				for bx in 8:
+					var base := rng.randf_range(0.7, 1.0)
+					var warm := rng.randf_range(-0.06, 0.06)
+					var c := Color(clampf(base + warm, 0, 1), base, clampf(base - warm, 0, 1))
+					img.fill_rect(Rect2i(bx * 2, by * 2, 2, 2), c)
+			_pixel_textures.append(ImageTexture.create_from_image(img))
+	return _pixel_textures[variant % PIXEL_VARIANTS]
+
+
+## Rebuilds a smooth primitive with one normal per face, so it looks faceted (low-poly).
+static func faceted(m: Mesh) -> Mesh:
+	if not (m is PrimitiveMesh):
+		return m
+	var st := SurfaceTool.new()
+	st.create_from(m, 0)
+	st.deindex()
+	st.generate_normals()
+	return st.commit()
 static var _shaded: Array = []
 
 
@@ -47,7 +79,13 @@ static func mat(color: Color, unshaded := false) -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	elif not unshaded:
-		m.roughness = 0.85
+		m.roughness = 0.9
+		# Chunky pixel texture with mottled color patches, mapped by position so it
+		# needs no UVs. Nearest filtering keeps the pixels crisp.
+		m.albedo_texture = _pixel_texture(randi() % PIXEL_VARIANTS)
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_NEAREST_WITH_MIPMAPS
+		m.uv1_triplanar = true
+		m.uv1_scale = Vector3.ONE * PIXEL_SCALE
 		_shaded.append(m)
 	return m
 
@@ -64,6 +102,7 @@ static func _outline() -> StandardMaterial3D:
 ## A mesh with an ink outline: a slightly bigger, inside-out black copy behind it.
 static func mesh(m: Mesh, color: Color, pos := Vector3.ZERO, outline := true) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
+	m = faceted(m)
 	mi.mesh = m
 	mi.material_override = mat(color)
 	mi.position = pos
