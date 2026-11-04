@@ -23,7 +23,7 @@ const RUN_NOISE := 9.0
 const SNEAK_NOISE := 2.5
 const LAND_NOISE := 7.0
 const TRANQ_NOISE := 8.0      # gunshot: loud
-const MAX_DARTS := 3
+const MAX_DARTS := 5
 const TRANQ_COOLDOWN := 0.5
 const RUN_STEP := 0.32        # seconds between footsteps
 const SNEAK_STEP := 0.55
@@ -36,6 +36,7 @@ var air_time := 0.0
 var darts := MAX_DARTS
 var tranq_timer := 0.0
 var aiming := false
+var aim_on_target := false     # crosshair is over a caveman (turns it red)
 var arm: SpringArm3D
 var visual: Node3D
 var net_pivot: Node3D
@@ -216,6 +217,7 @@ func _physics_process(delta: float) -> void:
 		swing_net()
 
 	# Tranq gun
+	aim_on_target = aiming and _crosshair_on_caveman()
 	tranq_timer -= delta
 	if tranq_timer <= 0.0 and Input.is_action_just_pressed("tranq"):
 		fire_tranq()
@@ -252,20 +254,28 @@ func fire_tranq() -> bool:
 	var muzzle := global_position + Vector3.UP * 1.1
 	var dir := Basis(Vector3.UP, yaw) * Vector3(0, 0, -1)
 	if aiming:
+		# Fly exactly down the crosshair line, starting level with the hero.
+		var fwd := -camera.global_basis.z
 		var from := camera.global_position
-		var to := from - camera.global_basis.z * 60.0
-		var q := PhysicsRayQueryParameters3D.create(from, to, Util.LAYER_WORLD | Util.LAYER_CAVEMAN)
-		var hit := get_world_3d().direct_space_state.intersect_ray(q)
-		var target: Vector3 = hit.position if not hit.is_empty() else to
-		dir = (target - muzzle).normalized()
-	visual.rotation.y = atan2(dir.x, dir.z)
+		dir = fwd
+		muzzle = from + fwd * max(0.0, (muzzle - from).dot(fwd))
+	if not aiming:
+		visual.rotation.y = atan2(dir.x, dir.z)
 	var dart := Node3D.new()
 	dart.set_script(DartScript)
 	dart.direction = dir
 	get_parent().add_child(dart)
-	dart.global_position = muzzle + dir * 0.6
+	dart.global_position = muzzle + dir * 0.3
 	make_noise(TRANQ_NOISE, Color(1, 0.85, 0.2, 0.85))
 	return true
+
+
+func _crosshair_on_caveman() -> bool:
+	var from := camera.global_position
+	var q := PhysicsRayQueryParameters3D.create(from, from - camera.global_basis.z * 60.0,
+		Util.LAYER_WORLD | Util.LAYER_CAVEMAN)
+	var hit := get_world_3d().direct_space_state.intersect_ray(q)
+	return not hit.is_empty() and hit.collider.is_in_group("gatherers")
 
 
 ## Sends a sound out. Any caveman inside the radius hears it.

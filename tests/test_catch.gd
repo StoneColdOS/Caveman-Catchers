@@ -86,7 +86,7 @@ func _run() -> void:
 	_check(peak > 0.8, "Player can jump")
 
 	# --- 5. Aiming and the tranq gun.
-	_check(player.darts == 3, "Start with 3 darts")
+	_check(player.darts == 5, "Start with 5 darts")
 	player.global_position = g4.global_position + Vector3(0, 0, -10)
 	player.yaw = PI
 	Input.action_press("aim")
@@ -94,6 +94,20 @@ func _run() -> void:
 	_check(player.aiming, "Holding aim enters aim mode")
 	_check(main.crosshair.visible, "Crosshair shows while aiming")
 	_check(player.camera.fov < 60.0, "Camera zooms in while aiming")
+	# Crosshair just past his shoulder: not red, and the dart should miss (no drift either way).
+	var off_target: Vector3 = g4.global_position + Vector3.UP * 0.9 + Vector3(0.9, 0, 0)
+	for i in 6:
+		var to_off: Vector3 = off_target - player.camera.global_position
+		player.yaw = atan2(-to_off.x, -to_off.z)
+		player.pitch = atan2(to_off.y, Vector2(to_off.x, to_off.z).length())
+		await _frames(4)
+	_check(not player.aim_on_target, "Crosshair stays normal when it's off him")
+	player.fire_tranq()
+	await _frames(25)
+	_check(not g4.is_drowsy(), "A shot just past him misses, exactly like the crosshair showed")
+	player.darts = 5
+	player.tranq_timer = 0.0
+
 	# Put the crosshair on his chest, like a player nudging the right stick.
 	var cam_target: Vector3 = g4.global_position + Vector3.UP * 0.9
 	for i in 6:
@@ -101,8 +115,9 @@ func _run() -> void:
 		player.yaw = atan2(-to_target.x, -to_target.z)
 		player.pitch = atan2(to_target.y, Vector2(to_target.x, to_target.z).length())
 		await _frames(4)
+	_check(player.aim_on_target, "Crosshair turns red when it's on a caveman")
 	_check(player.fire_tranq(), "Tranq gun fires")
-	_check(player.darts == 2, "Firing uses a dart")
+	_check(player.darts == 4, "Firing uses a dart")
 	await _frames(25)
 	_check(g4.is_drowsy(), "Aimed dart hits: he staggers first instead of dropping instantly")
 	await _frames(130)

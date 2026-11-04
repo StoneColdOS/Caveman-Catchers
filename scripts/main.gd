@@ -16,7 +16,7 @@ var count_label: Label
 var mode_label: Label
 var darts_label: Label
 var alert_label: Label
-var crosshair: Label
+var crosshair: Control
 var game_over := false
 var message_label: Label
 var rng := RandomNumberGenerator.new()
@@ -41,6 +41,7 @@ func _process(delta: float) -> void:
 	_update_alert()
 	if player and crosshair:
 		crosshair.visible = player.aiming and not game_over
+		crosshair.modulate = Color(1, 0.25, 0.2) if player.aim_on_target else Color(1, 0.95, 0.6)
 	if player and darts_label:
 		darts_label.text = "Darts: %d" % player.darts
 		darts_label.modulate = Color(1, 0.45, 0.35) if player.darts == 0 else Color(1, 0.9, 0.5)
@@ -248,19 +249,22 @@ func _build_hud() -> void:
 	alert_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(alert_label)
 
-	crosshair = Label.new()
-	crosshair.text = "+"
+	# Crosshair drawn from rectangles so it sits exactly on the screen center.
+	crosshair = Control.new()
 	crosshair.set_anchors_preset(Control.PRESET_CENTER)
-	crosshair.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	crosshair.grow_vertical = Control.GROW_DIRECTION_BOTH
-	crosshair.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	crosshair.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	crosshair.add_theme_font_size_override("font_size", 48)
-	crosshair.add_theme_constant_override("outline_size", 6)
-	crosshair.add_theme_color_override("font_outline_color", Color.BLACK)
-	crosshair.modulate = Color(1, 0.9, 0.4)
+	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	crosshair.visible = false
 	layer.add_child(crosshair)
+	var arms := [Rect2(-15, -1, 10, 2), Rect2(5, -1, 10, 2), Rect2(-1, -15, 2, 10), Rect2(-1, 5, 2, 10), Rect2(-1.5, -1.5, 3, 3)]
+	for pass_i in 2:
+		for r in arms:
+			var bar := ColorRect.new()
+			var grow := 1.0 if pass_i == 0 else 0.0
+			bar.position = r.position - Vector2(grow, grow)
+			bar.size = r.size + Vector2(grow, grow) * 2.0
+			bar.color = Color(0, 0, 0, 0.8) if pass_i == 0 else Color.WHITE
+			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			crosshair.add_child(bar)
 
 	var hint := Label.new()
 	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Camera: R-stick  Restart: Start"
