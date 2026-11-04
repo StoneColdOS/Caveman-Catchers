@@ -2,7 +2,7 @@
 
 *Catch those damn dirty humans.*
 
-A 3D stealth-catching game: an ape in a 1960s spacesuit rounds up escaped cavemen on a jungle planet. Ape Escape 2/3 catching meets Metal Gear Solid stealth, with a nod to Planet of the Apes.
+A 3D stealth-catching game: a grumpy old space chimp sneaks up on janky, broken robot monkeys in the jungle and stuffs them in his satchel. Ape Escape 2/3 catching meets Metal Gear Solid stealth, with rubber hose animation and a pixel low-poly look.
 
 Built in Godot 4.7, targeting the AYN Thor handheld.
 
@@ -42,4 +42,4 @@ The yellow text in the top right is a temporary controller readout, so we can se
 
 ## Tests
 
-`godot --headless --path . -s res://tests/test_catch.gd` plays the core loop automatically: gets spotted, sneaks up, nets a caveman, and checks each step.
+`godot --headless --path . -s res://tests/test_catch.gd` plays the core loop automatically: gets spotted, sneaks up, grabs a robot, and checks each step.
