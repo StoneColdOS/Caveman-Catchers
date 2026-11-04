@@ -13,11 +13,11 @@ Built in Godot 4.7, targeting the AYN Thor handheld.
 
 ## Current state: Prototype 4
 
-Grey boxes only. One caveman type (the Gatherer), five of them in a jungle clearing, a net and a tranq gun.
+Placeholder shapes. A grumpy old space chimp with a net hunts five janky robot monkeys in a jungle clearing. Rubber hose animation (STYLE button / Select / T to compare with plain).
 
 - **Green cone:** he's calm and hasn't seen you
 - **Yellow "?":** he sees you and is getting suspicious. Duck out of sight and he'll calm down
-- **Red "! 5":** he spotted you and is running to warn the tribe. Net him or dart him before the countdown hits zero, or it's game over
+- **Red "!":** he spotted you and runs, panic-hopping. Chase him down and net him, or let him lose you and he'll calm down
 - Crouching shrinks how far they can see you. Rocks and trees block their view.
 
 | | Thor / gamepad | Keyboard |

@@ -14,7 +14,7 @@ Tagline: *Catch those damn dirty humans.*
 | Source | What we take from it |
 |---|---|
 | Ape Escape 2/3 | Catching loop, gadget-driven play, level design, goofy targets with personality, health and game over |
-| Metal Gear Solid 2/3 | Sneaking, vision cones, alert states, tranq vs non-lethal approach |
+| Metal Gear Solid 2/3 | Sneaking, vision cones, alert states, sound |
 | Planet of the Apes (1968) | Role reversal: apes in charge, humans on the run. Flipped quotes and nods, never copied lines |
 
 ## Locked decisions
@@ -24,13 +24,13 @@ Tagline: *Catch those damn dirty humans.*
 - **Hero:** an ape in a 1960s retro spacesuit with a bubble helmet. Face kept mostly hidden in shadow for mystery. Exact look to be designed later by the user
 - **Targets:** escaped cavemen and cavewomen
 - **Setting for first area:** jungle planet
-- **Catch flow:** spot target, sneak up, tranq or net, beam them away
+- **Catch flow:** spot target, sneak up, net them, beam them away
 - **Tools:**
   - **Net:** silent, but you have to sneak in close
 - **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
 - **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm
-- **Getting spotted (Ape Escape style):** the robot leaps, yells (nearby robots hear it) and runs. Chase him down or dart him. Lose him and he calms down. No countdowns, no game over for being seen. Tried burrows, instant game over and an area alert; the user disliked all three
+- **Getting spotted (Ape Escape style):** the robot leaps, yells (nearby robots hear it) and runs. Chase him down and net him. Lose him and he calms down. No countdowns, no game over for being seen. Tried burrows, instant game over and an area alert; the user disliked all three
 - **Tranq gun: removed.** Tried auto-aim, real aiming, delayed knockout and 3 to 6 darts. Once spotting became harmless it was overpowered, so the game is net only for now
 - **Fail state:** none for now. Getting spotted costs you a chase, not the round
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
@@ -71,6 +71,6 @@ Each future type should have one clear reaction, so players can read a situation
 2. Who sends the hero, and is he a bounty hunter, an agent, something else?
 3. Final caveman roster and looks
 4. Hero's final look (the user has a sketch to build from)
-5. Gadget list beyond tranq and net
+5. Gadget list beyond the net
 6. Level structure: hub world with missions, or linear levels?
 7. Is the Thor the only target, or also PC/Mac later?
