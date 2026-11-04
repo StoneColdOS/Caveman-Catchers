@@ -3,9 +3,13 @@ extends CharacterBody3D
 ##   Calm:        wanders, forages with his head down (half blind), stops to look around.
 ##   Hears noise: hops, says "?", walks over to check it out, looks around.
 ##   Sees you:    stares while his "?" grows. Lose him and he checks where he last saw you.
-##   Spotted:     leaps, yells (nearby cavemen hear it) and runs, panic-hopping.
+##   Spotted:     leaps, yells (nearby cavemen hear it) and runs for a burrow, panic-hopping.
+##   Hidden:      dove into a burrow. Pops out of a different one a while later.
+##   Asleep:      tranquilized. Lies flat ("Zzz"), easy to net, wakes up groggy.
 
-enum State { WANDER, FORAGE, SUSPICIOUS, INVESTIGATE, FLEE, CAUGHT }
+signal escaped
+
+enum State { WANDER, FORAGE, SUSPICIOUS, INVESTIGATE, FLEE, CAUGHT, HIDDEN, SLEEP }
 
 const Util := preload("res://scripts/util.gd")
 
@@ -23,6 +27,8 @@ const CALM_RATE := 0.25
 const HEAR_BUMP := 0.3
 const FLEE_TIME := 5.0
 const YELL_RADIUS := 10.0
+const HIDE_TIME := 10.0
+const SLEEP_TIME := 8.0
 const GRAVITY := 20.0
 
 const CONE_CALM := Color(0.2, 1.0, 0.45, 0.3)
@@ -43,6 +49,10 @@ var state_timer := 0.0
 var look_timer := 0.0
 var flee_timer := 0.0
 var hop_timer := 0.0
+var hidden_timer := 0.0
+var sleep_timer := 0.0
+var flee_hole: Node3D
+var hole_timer := 0.0
 var heading := 0.0
 var turn_speed := 4.0
 var player: Node3D
@@ -110,6 +120,9 @@ func _build_visual() -> void:
 func _physics_process(delta: float) -> void:
 	if state == State.CAUGHT:
 		return
+	if state == State.HIDDEN:
+		_do_hidden(delta)
+		return
 	var sees := can_see_player()
 	var move := Vector3.ZERO
 	match state:
@@ -123,6 +136,8 @@ func _physics_process(delta: float) -> void:
 			move = _do_investigate(delta, sees)
 		State.FLEE:
 			move = _do_flee(delta, sees)
+		State.SLEEP:
+			_do_sleep(delta)
 
 	velocity.x = move.x
 	velocity.z = move.z
@@ -236,9 +251,90 @@ func _do_flee(delta: float, sees: bool) -> Vector3:
 	if hop_timer <= 0.0 and is_on_floor():
 		velocity.y = 4.0
 		hop_timer = randf_range(0.8, 1.6)
-	var away := _flat(global_position - player.global_position)
-	_face(global_position + away, 10.0)
-	return away.normalized() * FLEE_SPEED
+	# Head for the safest burrow (re-checked every second).
+	hole_timer -= delta
+	if hole_timer <= 0.0 or not is_instance_valid(flee_hole):
+		flee_hole = _pick_hole()
+		hole_timer = 1.0
+	var dir := _flat(global_position - player.global_position).normalized()
+	if flee_hole:
+		var to := _flat(flee_hole.global_position - global_position)
+		if to.length() < 0.9:
+			_dive(flee_hole)
+			return Vector3.ZERO
+		dir = to.normalized()
+	_face(global_position + dir, 10.0)
+	return dir * FLEE_SPEED
+
+
+## Prefers burrows close to him and far from you.
+func _pick_hole() -> Node3D:
+	var best: Node3D = null
+	var best_score := INF
+	for h in get_tree().get_nodes_in_group("burrows"):
+		var d_me := global_position.distance_to(h.global_position)
+		var d_you := player.global_position.distance_to(h.global_position)
+		if d_you < d_me * 0.6:
+			continue  # you're in the way
+		var score := d_me - 0.8 * d_you
+		if score < best_score:
+			best_score = score
+			best = h
+	return best
+
+
+func _dive(hole: Node3D) -> void:
+	state = State.HIDDEN
+	hidden_timer = HIDE_TIME
+	velocity = Vector3.ZERO
+	collision_layer = 0
+	collision_mask = 0
+	alert.text = ""
+	cone.visible = false
+	global_position = hole.global_position
+	var tw := create_tween()
+	tw.tween_property(visual, "position:y", -2.2, 0.35).set_ease(Tween.EASE_IN)
+	Util.noise_ring(get_parent(), global_position, 2.0, Color(0.5, 0.35, 0.2, 0.8))
+	escaped.emit()
+
+
+func _do_hidden(delta: float) -> void:
+	hidden_timer -= delta
+	if hidden_timer > 0.0:
+		return
+	# Pop out of a different burrow.
+	var holes := get_tree().get_nodes_in_group("burrows").filter(
+		func(h): return h.global_position.distance_to(global_position) > 1.0)
+	if holes.size() > 0:
+		global_position = holes.pick_random().global_position
+	home = global_position
+	collision_layer = Util.LAYER_CAVEMAN
+	collision_mask = Util.LAYER_WORLD | Util.LAYER_PLAYER | Util.LAYER_CAVEMAN
+	cone.visible = true
+	var tw := create_tween()
+	tw.tween_property(visual, "position:y", 0.0, 0.3).set_ease(Tween.EASE_OUT)
+	state = State.WANDER
+	awareness = 0.5
+	wait_timer = 1.5
+	turn_timer = 0.2
+	_hop(5.0)
+
+
+func _do_sleep(delta: float) -> void:
+	sleep_timer -= delta
+	if sleep_timer <= 0.0:
+		awareness = 0.7
+		_start_investigate(global_position, true)
+
+
+## Hit by a tranq dart.
+func tranq() -> void:
+	if state == State.CAUGHT or state == State.HIDDEN:
+		return
+	state = State.SLEEP
+	sleep_timer = SLEEP_TIME
+	velocity.x = 0.0
+	velocity.z = 0.0
 
 
 func _become_suspicious(hop: bool) -> void:
@@ -264,6 +360,7 @@ func _start_flee() -> void:
 	awareness = 1.0
 	flee_timer = FLEE_TIME
 	hop_timer = 0.9
+	hole_timer = 0.0
 	_hop(6.0)
 	# Yell! Nearby cavemen hear it and come check it out.
 	Util.noise_ring(get_parent(), global_position, YELL_RADIUS, Color(1, 0.2, 0.15, 0.8))
@@ -279,7 +376,7 @@ func _hop(power: float) -> void:
 
 ## Called whenever something makes a sound.
 func hear_noise(pos: Vector3, radius: float, source: Node) -> void:
-	if source == self or state == State.FLEE or state == State.CAUGHT or state == State.SUSPICIOUS:
+	if source == self or state in [State.FLEE, State.CAUGHT, State.SUSPICIOUS, State.HIDDEN, State.SLEEP]:
 		return
 	if global_position.distance_to(pos) > radius:
 		return
@@ -289,7 +386,7 @@ func hear_noise(pos: Vector3, radius: float, source: Node) -> void:
 
 
 func can_see_player() -> bool:
-	if player == null:
+	if player == null or state == State.SLEEP or state == State.HIDDEN:
 		return false
 	var crouching: bool = player.crouching
 	var sight := _sight_range()
@@ -317,6 +414,14 @@ func _sight_range() -> float:
 
 func is_caught() -> bool:
 	return state == State.CAUGHT
+
+
+func can_be_netted() -> bool:
+	return state != State.CAUGHT and state != State.HIDDEN
+
+
+func is_asleep() -> bool:
+	return state == State.SLEEP
 
 
 func catch() -> void:
@@ -382,10 +487,18 @@ func _update_indicators(delta: float) -> void:
 			cone_mat.albedo_color = CONE_SPOTTED
 			alert.text = "!"
 			alert.modulate = Color(1, 0.3, 0.25)
+		State.SLEEP:
+			alert.text = "Zzz"
+			alert.modulate = Color(0.7, 0.85, 1)
+	cone.visible = state != State.SLEEP
 	# "?" grows as he gets closer to spotting you.
 	alert.pixel_size = 0.012 * (1.0 + awareness * 0.8) if state != State.FLEE else 0.02
+	if state == State.SLEEP:
+		alert.pixel_size = 0.01
 	# Head down while foraging.
 	var lean := 0.7 + sin(Time.get_ticks_msec() * 0.012) * 0.12 if foraging else 0.0
+	if state == State.SLEEP:
+		lean = -1.45  # flat on his back
 	torso.rotation.x = lerp(torso.rotation.x, lean, clamp(10.0 * delta, 0.0, 1.0))
 	# The cone shows how far he can actually see you right now.
 	var reach := _sight_range() / SIGHT_RANGE

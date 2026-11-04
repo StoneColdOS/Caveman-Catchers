@@ -4,6 +4,7 @@ extends CharacterBody3D
 signal caught_one
 
 const Util := preload("res://scripts/util.gd")
+const DartScript := preload("res://scripts/dart.gd")
 
 # MGS-style movement: how hard you push the stick decides how loud you are.
 const CROUCH_SPEED := 1.6     # creeping: silent
@@ -21,6 +22,11 @@ const NET_COOLDOWN := 0.45
 const RUN_NOISE := 9.0
 const SNEAK_NOISE := 2.5
 const LAND_NOISE := 7.0
+const TRANQ_NOISE := 8.0      # gunshot: loud
+const MAX_DARTS := 6
+const TRANQ_COOLDOWN := 0.5
+const AIM_ASSIST_DEG := 18.0
+const AIM_RANGE := 28.0
 const RUN_STEP := 0.32        # seconds between footsteps
 const SNEAK_STEP := 0.55
 
@@ -29,6 +35,8 @@ var move_mode := "Standing still"
 var step_timer := 0.0
 var was_on_floor := true
 var air_time := 0.0
+var darts := MAX_DARTS
+var tranq_timer := 0.0
 var visual: Node3D
 var net_pivot: Node3D
 var camera_pivot: Node3D
@@ -193,6 +201,11 @@ func _physics_process(delta: float) -> void:
 	if net_timer <= 0.0 and Input.is_action_just_pressed("net"):
 		swing_net()
 
+	# Tranq gun
+	tranq_timer -= delta
+	if tranq_timer <= 0.0 and Input.is_action_just_pressed("tranq"):
+		fire_tranq()
+
 
 func swing_net() -> void:
 	net_timer = NET_COOLDOWN
@@ -205,7 +218,7 @@ func swing_net() -> void:
 	fwd.y = 0.0
 	fwd = fwd.normalized()
 	for g in get_tree().get_nodes_in_group("gatherers"):
-		if g.is_caught():
+		if not g.can_be_netted():
 			continue
 		var to: Vector3 = g.global_position - global_position
 		to.y = 0.0
@@ -215,9 +228,43 @@ func swing_net() -> void:
 			caught_one.emit()
 
 
+## Fires a dart where the camera is pointing, nudged onto a nearby caveman.
+## Returns true if a dart was fired.
+func fire_tranq() -> bool:
+	if darts <= 0:
+		return false
+	darts -= 1
+	tranq_timer = TRANQ_COOLDOWN
+	var muzzle := global_position + Vector3.UP * 1.1
+	var aim := Basis(Vector3.UP, yaw) * Vector3(0, 0, -1)
+	var dir := aim
+	var best := AIM_ASSIST_DEG
+	for g in get_tree().get_nodes_in_group("gatherers"):
+		if not g.can_be_netted() or g.is_asleep():
+			continue
+		var to: Vector3 = g.global_position + Vector3.UP * 1.0 - muzzle
+		if to.length() > AIM_RANGE:
+			continue
+		var ang := rad_to_deg(aim.angle_to(Vector3(to.x, 0, to.z)))
+		if ang < best:
+			var q := PhysicsRayQueryParameters3D.create(muzzle, muzzle + to, Util.LAYER_WORLD)
+			if get_world_3d().direct_space_state.intersect_ray(q).is_empty():
+				best = ang
+				dir = to.normalized()
+	visual.rotation.y = atan2(dir.x, dir.z)
+	var dart := Node3D.new()
+	dart.set_script(DartScript)
+	dart.direction = dir
+	get_parent().add_child(dart)
+	dart.global_position = muzzle + dir * 0.6
+	make_noise(TRANQ_NOISE, Color(1, 0.85, 0.2, 0.85))
+	return true
+
+
 ## Sends a sound out. Any caveman inside the radius hears it.
-func make_noise(radius: float) -> void:
-	var color := Color(1, 0.4, 0.3, 0.8) if radius >= RUN_NOISE else Color(1, 1, 1, 0.7)
+func make_noise(radius: float, color := Color(0, 0, 0, 0)) -> void:
+	if color.a == 0.0:
+		color = Color(1, 0.4, 0.3, 0.8) if radius >= RUN_NOISE else Color(1, 1, 1, 0.7)
 	Util.noise_ring(get_parent(), global_position, radius, color)
 	get_tree().call_group("gatherers", "hear_noise", global_position, radius, self)
 

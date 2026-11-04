@@ -8,12 +8,16 @@ const PlayerScript := preload("res://scripts/player.gd")
 const GathererScript := preload("res://scripts/gatherer.gd")
 
 const ARENA := 50.0
+const BURROW_SPOTS := [Vector3(-19, 0, -19), Vector3(19, 0, -2), Vector3(-19, 0, 17), Vector3(7, 0, 21)]
 const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
 
 var player: CharacterBody3D
 var caught := 0
 var count_label: Label
 var mode_label: Label
+var darts_label: Label
+var toast_label: Label
+var toast_timer := 0.0
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -23,6 +27,7 @@ func _ready() -> void:
 	rng.seed = 7
 	_build_environment()
 	_build_ground()
+	_build_burrows()
 	_build_cover()
 	_spawn_player()
 	_spawn_gatherers()
@@ -30,10 +35,17 @@ func _ready() -> void:
 	_build_debug()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
 		get_tree().reload_current_scene()
 	_update_debug()
+	if toast_timer > 0.0:
+		toast_timer -= delta
+		if toast_timer <= 0.0:
+			toast_label.text = ""
+	if player and darts_label:
+		darts_label.text = "Darts: %d" % player.darts
+		darts_label.modulate = Color(1, 0.45, 0.35) if player.darts == 0 else Color(1, 0.9, 0.5)
 	if player and mode_label:
 		mode_label.text = player.move_mode
 		var loud: bool = player.move_mode.begins_with("Running")
@@ -128,6 +140,29 @@ func _build_ground() -> void:
 	_static_box(Vector3(2, 6, ARENA), Vector3(h + 1, 3, 0), wall)
 
 
+## Burrows: where spotted cavemen run to hide.
+func _build_burrows() -> void:
+	for spot in BURROW_SPOTS:
+		var b := Node3D.new()
+		b.add_to_group("burrows")
+		b.position = spot
+		add_child(b)
+		var hole := CylinderMesh.new()
+		hole.top_radius = 0.8
+		hole.bottom_radius = 0.8
+		hole.height = 0.04
+		hole.radial_segments = 10
+		b.add_child(Util.mesh(hole, Color(0.05, 0.04, 0.03), Vector3(0, 0.03, 0)))
+		var mound := TorusMesh.new()
+		mound.inner_radius = 0.75
+		mound.outer_radius = 1.3
+		mound.rings = 10
+		mound.ring_segments = 5
+		var m := Util.mesh(mound, Color(0.4, 0.28, 0.16), Vector3(0, 0.05, 0))
+		m.scale = Vector3(1, 0.5, 1)
+		b.add_child(m)
+
+
 ## Rocks and trees: things to sneak behind. They block caveman eyesight.
 func _build_cover() -> void:
 	for i in 14:
@@ -166,7 +201,11 @@ func _random_spot() -> Vector3:
 	# Keep the middle open near the player start, and away from walls.
 	while true:
 		var p := Vector3(rng.randf_range(-21, 21), 0, rng.randf_range(-21, 21))
-		if p.length() > 5.0:
+		var clear := p.length() > 5.0
+		for b in BURROW_SPOTS:
+			if p.distance_to(b) < 4.0:
+				clear = false
+		if clear:
 			return p
 	return Vector3.ZERO
 
@@ -200,6 +239,7 @@ func _spawn_gatherers() -> void:
 		g.set_script(GathererScript)
 		g.position = spot + Vector3(0, 0.1, 0)
 		add_child(g)
+		g.escaped.connect(_on_escaped)
 
 
 func _build_hud() -> void:
@@ -220,8 +260,26 @@ func _build_hud() -> void:
 	mode_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(mode_label)
 
+	darts_label = Label.new()
+	darts_label.position = Vector2(24, 96)
+	darts_label.add_theme_font_size_override("font_size", 24)
+	darts_label.add_theme_constant_override("outline_size", 6)
+	darts_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(darts_label)
+
+	toast_label = Label.new()
+	toast_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	toast_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	toast_label.offset_top = 90
+	toast_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	toast_label.add_theme_font_size_override("font_size", 30)
+	toast_label.add_theme_constant_override("outline_size", 8)
+	toast_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	toast_label.modulate = Color(1, 0.6, 0.4)
+	layer.add_child(toast_label)
+
 	var hint := Label.new()
-	hint.text = "Move: L-stick (light tilt = sneak)   Jump: A   Crouch: L1   Net: R1   Camera: R-stick   Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Tranq: R2  Camera: R-stick  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44
@@ -242,6 +300,11 @@ func _build_hud() -> void:
 	layer.add_child(message_label)
 
 	_update_hud()
+
+
+func _on_escaped() -> void:
+	toast_label.text = "A caveman dove into a burrow!"
+	toast_timer = 2.5
 
 
 func _on_caught() -> void:

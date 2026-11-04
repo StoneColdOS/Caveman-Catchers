@@ -31,6 +31,7 @@ Tagline: *Catch those damn dirty humans.*
 - **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
 - **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm
+- **Burrows (experiment):** spotted Gatherers run for a burrow and pop out of a different one later. User was unsure about this, so it's on trial
 - **Fail state:** health and game over, Ape Escape style
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
 - **Engine:** Godot 4.7

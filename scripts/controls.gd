@@ -6,7 +6,8 @@ extends RefCounted
 ##   Camera     right stick / arrow keys
 ##   Jump       A (bottom)  / Space
 ##   Crouch     L1 or L2    / Shift or C
-##   Swing net  R1 or R2    / J or E
+##   Swing net  R1          / J or E
+##   Tranq gun  R2          / F or K   (fires where the camera points)
 ##   Restart    Start       / Enter
 
 
@@ -37,7 +38,11 @@ static func setup() -> void:
 	_key("net", KEY_J)
 	_key("net", KEY_E)
 	_button("net", JOY_BUTTON_RIGHT_SHOULDER)
-	_axis("net", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+
+	_action("tranq")
+	_key("tranq", KEY_F)
+	_key("tranq", KEY_K)
+	_axis("tranq", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
 	_action("jump")
 	_key("jump", KEY_SPACE)

@@ -33,7 +33,15 @@ Still one caveman type, still grey boxes.
 - [x] 5 cavemen
 - [x] Play it on the Thor. Verdict: way more challenging, crouching is a great addition, feels like a real Ape Escape x MGS crossover. Jumping onto alerted cavemen to catch them works
 
-Tranq, health and other caveman types wait until this feels good.
+## Prototype 3: stakes when spotted (current)
+
+The jump-catch made getting spotted too forgiving. Two experiments, still one caveman type:
+
+- [x] Burrows: a spotted caveman runs for the safest burrow, dives in, and pops out of a different one about 10 seconds later
+- [x] Tranq gun (R2): fires where the camera points with light auto-aim, puts a caveman to sleep for 8 seconds so you can net him, but the shot is loud and you only get 6 darts
+- [ ] Play it: do burrows add tension or just annoy? Is the tranq worth its noise?
+
+Health, other caveman types and art wait until this feels good.
 
 ---
 

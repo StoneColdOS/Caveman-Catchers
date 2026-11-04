@@ -79,8 +79,45 @@ func _run() -> void:
 		peak = max(peak, player.global_position.y)
 	_check(peak > 0.8, "Player can jump")
 
-	# --- 5. A miss: swinging at thin air catches nothing.
+	# --- 5. Tranq: dart from 10m puts him to sleep, then net him.
+	_check(player.darts == player.MAX_DARTS, "Start with a full set of darts")
+	player.global_position = g4.global_position + Vector3(0, 0, -10)
+	player.yaw = PI  # camera pointing at him
+	await _frames(5)
+	_check(player.fire_tranq(), "Tranq gun fires")
+	_check(player.darts == player.MAX_DARTS - 1, "Firing uses a dart")
+	await _frames(30)
+	_check(g4.is_asleep(), "Dart puts the Gatherer to sleep")
+	_check(not g4.can_see_player(), "Sleeping Gatherer can't see you")
+	player.global_position = g4.global_position + Vector3(0, 0, -1.5)
+	player.visual.rotation.y = 0.0
+	await _frames(3)
+	player.swing_net()
+	_check(g4.is_caught(), "Sleeping Gatherer can be netted")
+	player.darts = 0
+	_check(not player.fire_tranq(), "Out of darts: nothing fires")
+
+	# --- 6. Burrows: the spotted Gatherer from test 1 dives into one, then pops out of another.
+	_check(get_nodes_in_group("burrows").size() == 4, "4 burrows in the level")
+	var escaped_into := Vector3.ZERO
+	for i in 600:
+		await physics_frame
+		if g1.state == g1.State.HIDDEN:
+			escaped_into = g1.global_position
+			break
+	_check(g1.state == g1.State.HIDDEN, "Fleeing Gatherer dives into a burrow")
+	_check(not g1.can_be_netted(), "Can't net a Gatherer hiding in a burrow")
+	for i in 700:
+		await physics_frame
+		if g1.state != g1.State.HIDDEN:
+			break
+	_check(g1.state != g1.State.HIDDEN, "He comes back out later")
+	_check(g1.global_position.distance_to(escaped_into) > 3.0, "...from a different burrow")
+
+	# --- 7. A miss: swinging at thin air catches nothing.
 	var g0 = gs[0]
+	player.global_position = Vector3(0, 0.1, 0)
+	await _frames(3)
 	player.swing_net()
 	_check(not g0.is_caught(), "Swinging out of range catches nothing")
 
