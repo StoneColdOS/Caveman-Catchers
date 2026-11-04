@@ -20,18 +20,21 @@ var alert_label: Label
 var crosshair: Control
 var game_over := false
 var hint_label: Label
+var film: ColorRect
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
 	Controls.setup()
+	Util.reset_style_cache()
 	rng.seed = 7
 	_build_environment()
 	_build_ground()
 	_build_cover()
 	_spawn_player()
 	_spawn_gatherers()
+	_build_film()
 	_build_hud()
 	_build_debug()
 	if use_touch():
@@ -43,6 +46,11 @@ func _process(delta: float) -> void:
 		get_tree().reload_current_scene()
 	_update_debug()
 	_update_alert()
+	if Input.is_action_just_pressed("style"):
+		Util.set_rubber(get_tree(), not Util.rubber)
+	if film:
+		film.visible = Util.rubber
+	_dance_trees()
 	if player and crosshair:
 		crosshair.visible = player.aiming and not game_over
 		crosshair.modulate = Color(1, 0.25, 0.2) if player.aim_on_target else Color(1, 0.95, 0.6)
@@ -193,7 +201,10 @@ func _tree(p: Vector3) -> void:
 	trunk.height = trunk_h
 	trunk.radial_segments = 6
 	body.add_child(Util.mesh(trunk, Color(0.35, 0.24, 0.15), Vector3(0, trunk_h / 2.0, 0)))
-	body.add_child(Util.mesh(Util.sphere(rng.randf_range(1.6, 2.4)), Color(0.18, 0.42, 0.18), Vector3(0, trunk_h + 0.6, 0)))
+	var canopy := Util.mesh(Util.sphere(rng.randf_range(1.6, 2.4)), Color(0.18, 0.42, 0.18), Vector3(0, trunk_h + 0.6, 0))
+	canopy.set_meta("phase", rng.randf() * 0.6)
+	canopy.add_to_group("dancers")
+	body.add_child(canopy)
 
 
 func _random_spot() -> Vector3:
@@ -290,7 +301,7 @@ func _build_hud() -> void:
 
 	hint_label = Label.new()
 	var hint := hint_label
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Look: R-stick  Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Look: R-stick  Style: Select  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44
@@ -311,6 +322,32 @@ func _build_hud() -> void:
 	layer.add_child(message_label)
 
 	_update_hud()
+
+
+## Old-film filter over the 3D view (under the HUD so text stays crisp).
+func _build_film() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 0
+	add_child(layer)
+	film = ColorRect.new()
+	film.set_anchors_preset(Control.PRESET_FULL_RECT)
+	film.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/film.gdshader")
+	film.material = sm
+	film.visible = Util.rubber
+	layer.add_child(film)
+
+
+## Tree tops squash and sway to the beat in rubber hose mode.
+func _dance_trees() -> void:
+	var b := Util.beat()
+	var a := 0.07 if Util.rubber else 0.0
+	for c in get_tree().get_nodes_in_group("dancers"):
+		var ph: float = c.get_meta("phase")
+		var bounce := absf(sin(b * 0.5 + ph))
+		c.scale = Vector3(1.0 + a * (1.0 - bounce), 1.0 - a + 2.0 * a * bounce, 1.0 + a * (1.0 - bounce))
+		c.rotation.z = sin(b * 0.25 + ph * 3.0) * a * 1.5
 
 
 ## Spotted robots just run (Ape Escape style); the "!" over their heads is the only alarm.

@@ -9,6 +9,7 @@ extends RefCounted
 ##   Aim        hold L2     / hold Q
 ##   Swing net  R1          / J or E
 ##   Tranq gun  R2          / F or K   (at the crosshair while aiming)
+##   Art style  Select      / T   (rubber hose on/off)
 ##   Restart    Start       / Enter
 
 
@@ -54,6 +55,10 @@ static func setup() -> void:
 
 	_action("walk")
 	_key("walk", KEY_CTRL)
+
+	_action("style")
+	_key("style", KEY_T)
+	_button("style", JOY_BUTTON_BACK)
 
 	_action("restart")
 	_key("restart", KEY_ENTER)

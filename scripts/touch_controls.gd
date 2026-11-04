@@ -38,6 +38,7 @@ func _layout() -> void:
 		"aim":    {"pos": Vector2(right - 130, bottom - 105), "radius": 38.0, "label": "AIM", "action": "aim", "toggle": true},
 		"crouch": {"pos": Vector2(right - 225, bottom + 25), "radius": 38.0, "label": "CROUCH", "action": "crouch", "toggle": true},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
+		"style": {"pos": Vector2(s.x - 60, 225), "radius": 30.0, "label": "STYLE", "action": "style", "toggle": false},
 	}
 	queue_redraw()
 

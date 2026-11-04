@@ -60,6 +60,13 @@ var head: Node3D
 var key: Node3D
 var eye_mat: StandardMaterial3D
 var glitch_timer := 0.0
+var legs: Array = []
+var arms: Array = []
+var neck: MeshInstance3D
+var head_base_y := 0.0
+var head_pop := 0.0
+var head_pop_vel := 0.0
+var walk_phase := 0.0
 var cone: MeshInstance3D
 var cone_mat: StandardMaterial3D
 var alert: Label3D
@@ -102,17 +109,28 @@ func _build_visual() -> void:
 	body.rotation.z = randf_range(-0.08, 0.08)
 	torso.add_child(body)
 	torso.add_child(Util.mesh(Util.box(Vector3(0.2, 0.16, 0.02)), rust, Vector3(-0.14, 0.66 + y, 0.26)))
-	torso.add_child(Util.mesh(Util.box(Vector3(0.16, 0.3, 0.18)), tin.darkened(0.3), Vector3(-0.16, 0.32 + y, 0)))
-	torso.add_child(Util.mesh(Util.box(Vector3(0.16, 0.3, 0.18)), tin.darkened(0.3), Vector3(0.16, 0.32 + y, 0)))
-	# Arms: one normal, one hanging broken
-	torso.add_child(Util.mesh(Util.box(Vector3(0.1, 0.42, 0.1)), tin.darkened(0.2), Vector3(0.38, 0.72 + y, 0.02)))
-	var broken := Util.mesh(Util.box(Vector3(0.1, 0.46, 0.1)), tin.darkened(0.2), Vector3(-0.42, 0.6 + y, 0.06))
-	broken.rotation.z = -0.5
-	torso.add_child(broken)
-	# TV-screen head on a neck spring, round ears
-	torso.add_child(Util.mesh(Util.box(Vector3(0.08, 0.14, 0.08)), Color(0.3, 0.3, 0.32), Vector3(0, 1.17 + y, 0)))
+	# Legs and arms hang from pivots so they can swing, scissor and flail.
+	for side in [-1.0, 1.0]:
+		var hip := Node3D.new()
+		hip.position = Vector3(0.16 * side, 0.47 + y, 0)
+		torso.add_child(hip)
+		hip.add_child(Util.mesh(Util.box(Vector3(0.16, 0.3, 0.18)), tin.darkened(0.3), Vector3(0, -0.15, 0)))
+		hip.add_child(Util.mesh(Util.box(Vector3(0.2, 0.08, 0.28)), tin.darkened(0.45), Vector3(0, -0.3, 0.04)))
+		legs.append(hip)
+	for side in [-1.0, 1.0]:
+		var sh := Node3D.new()
+		sh.position = Vector3(0.38 * side, 0.95 + y, 0.02)
+		torso.add_child(sh)
+		var length := 0.46 if side < 0.0 else 0.42  # the broken one hangs longer
+		sh.add_child(Util.mesh(Util.box(Vector3(0.1, length, 0.1)), tin.darkened(0.2), Vector3(0, -length / 2.0, 0)))
+		sh.add_child(Util.mesh(Util.sphere(0.08), tin.lightened(0.2), Vector3(0, -length, 0)))
+		arms.append(sh)
+	# TV-screen head on a spring neck, round ears
+	neck = Util.mesh(Util.box(Vector3(0.08, 0.14, 0.08)), Color(0.3, 0.3, 0.32), Vector3(0, 1.17 + y, 0))
+	torso.add_child(neck)
+	head_base_y = 1.42 + y
 	head = Node3D.new()
-	head.position = Vector3(0, 1.42 + y, 0)
+	head.position = Vector3(0, head_base_y, 0)
 	torso.add_child(head)
 	head.add_child(Util.mesh(Util.box(Vector3(0.56, 0.42, 0.4)), tin.lightened(0.1), Vector3.ZERO))
 	head.add_child(Util.mesh(Util.box(Vector3(0.44, 0.3, 0.02)), Color(0.05, 0.07, 0.06), Vector3(0, 0, 0.205)))
@@ -330,6 +348,7 @@ func _become_suspicious(hop: bool) -> void:
 	last_seen = player.global_position
 	if hop:
 		_hop(3.5)
+		head_pop_vel = 4.0 * Util.amp()  # head boings up on its spring
 
 
 func _start_investigate(point: Vector3, hop: bool) -> void:
@@ -349,6 +368,7 @@ func _start_flee() -> void:
 	flee_timer = FLEE_TIME
 	hop_timer = 0.9
 	_hop(6.0)
+	head_pop_vel = 9.0 * Util.amp()  # jumps clean out of his skin
 	# Yell! Nearby cavemen hear it and come check it out.
 	Util.noise_ring(get_parent(), global_position, YELL_RADIUS, Color(1, 0.2, 0.15, 0.8))
 	get_tree().call_group("gatherers", "hear_noise", global_position, YELL_RADIUS, self)
@@ -529,6 +549,64 @@ func _jank(delta: float) -> void:
 		if randf() < 0.5:
 			_spark()
 	head.rotation = head.rotation.lerp(Vector3.ZERO, clamp(3.0 * delta, 0.0, 1.0))
+	_dance(delta)
+
+
+## Rubber hose motion: bob in sync to the beat, waddle, scissor legs, panic arms.
+func _dance(delta: float) -> void:
+	var amp := Util.amp()
+	var t := Time.get_ticks_msec() * 0.001
+	var beat := Util.beat()
+	var hs := Vector2(velocity.x, velocity.z).length()
+	walk_phase += hs * delta * 5.0
+	var bob := 0.0
+	var waddle := 0.0
+	var leg_swing := [0.0, 0.0]
+	var arm_z := [0.0, 0.0]
+	var arm_x := [0.0, 0.0]
+	match state:
+		State.FLEE:
+			bob = absf(sin(walk_phase * 1.5)) * 0.25
+			waddle = sin(walk_phase * 1.5) * 0.35
+			for i in 2:
+				var side := -1.0 if i == 0 else 1.0
+				leg_swing[i] = sin(walk_phase * 3.0 + i * PI) * 1.1
+				arm_z[i] = side * (2.7 + 0.35 * sin(t * 24.0 + i * 2.0))  # arms straight up, flailing
+		State.SLEEP:
+			arm_z = [-0.3, 0.3]
+		State.DROWSY:
+			waddle = sin(t * 6.0) * 0.45
+			arm_z = [-1.0 + sin(t * 5.0) * 0.4, 1.0 + sin(t * 5.0 + 1.0) * 0.4]
+		_:
+			if hs > 0.2:
+				bob = absf(sin(walk_phase)) * 0.12
+				waddle = sin(walk_phase) * 0.22
+				for i in 2:
+					leg_swing[i] = sin(walk_phase + i * PI) * 0.7
+					arm_x[i] = -sin(walk_phase + i * PI) * 0.7
+			else:
+				# Every calm robot bobs on the same beat. A little creepy, a little cute.
+				bob = absf(sin(beat * 0.5)) * 0.1
+				waddle = sin(beat * 0.25) * 0.14
+				arm_z = [-0.25 - absf(sin(beat * 0.5)) * 0.4, 0.25 + absf(sin(beat * 0.5)) * 0.4]
+	arm_z[0] -= 0.5  # the broken arm always droops
+	var k := clampf(14.0 * delta, 0.0, 1.0)
+	torso.position.y = lerp(torso.position.y, 0.2 + bob * amp, k)
+	torso.rotation.z = lerp_angle(torso.rotation.z, waddle * amp, k)
+	var st := (bob - 0.06) * 0.8 * amp
+	torso.scale = torso.scale.lerp(Vector3(1.0 - st * 0.5, 1.0 + st, 1.0 - st * 0.5), k)
+	for i in 2:
+		legs[i].rotation.x = lerp_angle(legs[i].rotation.x, leg_swing[i] * amp, k)
+		arms[i].rotation.z = lerp_angle(arms[i].rotation.z, arm_z[i] * maxf(amp, 0.6), k)
+		arms[i].rotation.x = lerp_angle(arms[i].rotation.x, arm_x[i] * amp, k)
+	# Spring neck: the head shoots up and wobbles back down
+	head_pop_vel += -head_pop * 160.0 * delta
+	head_pop_vel -= head_pop_vel * 5.0 * delta
+	head_pop += head_pop_vel * delta
+	var pop := maxf(head_pop, -0.08)
+	head.position.y = head_base_y + pop
+	neck.scale.y = 1.0 + maxf(pop, 0.0) / 0.14
+	neck.position.y = head_base_y - 0.25 + maxf(pop, 0.0) * 0.5
 
 
 func _spark() -> void:

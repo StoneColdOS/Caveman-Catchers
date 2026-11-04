@@ -7,6 +7,39 @@ const LAYER_PLAYER := 2
 const LAYER_CAVEMAN := 4
 
 
+## Art style: rubber hose (outlines, toon shading, old-film filter, extra bounce) or plain.
+static var rubber := true
+const BPM := 112.0               # everything bobs to this beat in rubber hose mode
+const OUTLINE := 0.05            # outline thickness in meters
+static var _outline_mat: StandardMaterial3D
+static var _shaded: Array = []
+
+
+## Phase of the shared beat, in radians.
+static func beat() -> float:
+	return Time.get_ticks_msec() * 0.001 * BPM / 60.0 * TAU
+
+
+## How exaggerated animation should be right now.
+static func amp() -> float:
+	return 1.0 if rubber else 0.35
+
+
+static func set_rubber(tree: SceneTree, on: bool) -> void:
+	rubber = on
+	for n in tree.get_nodes_in_group("outlines"):
+		n.visible = on
+	for m in _shaded:
+		if is_instance_valid(m):
+			m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON if on else BaseMaterial3D.DIFFUSE_BURLEY
+	tree.call_group("style_listeners", "on_style_changed", on)
+
+
+## Call when a scene starts so old materials aren't kept around.
+static func reset_style_cache() -> void:
+	_shaded.clear()
+
+
 static func mat(color: Color, unshaded := false) -> StandardMaterial3D:
 	var m := StandardMaterial3D.new()
 	m.albedo_color = color
@@ -16,14 +49,40 @@ static func mat(color: Color, unshaded := false) -> StandardMaterial3D:
 	if color.a < 1.0:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	elif not unshaded:
+		m.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
+		m.diffuse_mode = BaseMaterial3D.DIFFUSE_TOON if rubber else BaseMaterial3D.DIFFUSE_BURLEY
+		_shaded.append(m)
 	return m
 
 
-static func mesh(m: Mesh, color: Color, pos := Vector3.ZERO) -> MeshInstance3D:
+static func _outline() -> StandardMaterial3D:
+	if _outline_mat == null:
+		_outline_mat = StandardMaterial3D.new()
+		_outline_mat.albedo_color = Color(0.06, 0.05, 0.04)
+		_outline_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_outline_mat.cull_mode = BaseMaterial3D.CULL_FRONT
+	return _outline_mat
+
+
+## A mesh with an ink outline: a slightly bigger, inside-out black copy behind it.
+static func mesh(m: Mesh, color: Color, pos := Vector3.ZERO, outline := true) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = m
 	mi.material_override = mat(color)
 	mi.position = pos
+	if outline and color.a >= 1.0:
+		var o := MeshInstance3D.new()
+		o.mesh = m
+		o.material_override = _outline()
+		var sz := m.get_aabb().size
+		o.scale = Vector3((sz.x + 2.0 * OUTLINE) / maxf(sz.x, 0.001),
+			(sz.y + 2.0 * OUTLINE) / maxf(sz.y, 0.001),
+			(sz.z + 2.0 * OUTLINE) / maxf(sz.z, 0.001))
+		o.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		o.visible = rubber
+		o.add_to_group("outlines")
+		mi.add_child(o)
 	return mi
 
 
