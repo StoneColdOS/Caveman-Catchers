@@ -32,7 +32,9 @@ Grey boxes only. One caveman type (the Gatherer), three of them in a jungle clea
 
 **On your Mac:** install [Godot 4.7](https://godotengine.org/download), open Godot, click **Import**, select `project.godot` in this folder, then press **F5**.
 
-**On the Thor:** in Godot, go to **Editor > Manage Export Templates** and download them, then **Project > Export > Add > Android**. Godot will walk you through setting up the Android SDK the first time. Export the APK and sideload it onto the Thor.
+**On the Thor:** every push to `main` automatically builds an APK. On the Thor, open the [latest build](https://github.com/StoneColdOS/caveman-catchers/releases/tag/latest-build), download `caveman-catchers.apk` and install it. New builds install right over the old one.
+
+The yellow text in the top right is a temporary controller readout, so we can see what the game is receiving from the Thor.
 
 ## Tests
 
