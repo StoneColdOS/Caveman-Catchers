@@ -18,7 +18,7 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
   - Robots bob in sync to the beat, waddle, scissor-run with arms straight up, heads boing up on spring necks when startled
   - Trees sway to the beat
 - [x] Playtest: removed the old-film filter and the hero's outline (robots and world keep theirs). Rubber hose animation stays
-- [ ] Tranq feels overpowered: pick a fix
+- [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 ---
 

@@ -5,10 +5,8 @@ extends RefCounted
 ##   Sneak-walk              / hold Ctrl
 ##   Camera     right stick / arrow keys
 ##   Jump       A (bottom)  / Space
-##   Crouch     L1          / Shift or C
-##   Aim        hold L2     / hold Q
-##   Swing net  R1          / J or E
-##   Tranq gun  R2          / F or K   (at the crosshair while aiming)
+##   Crouch     L1 or L2    / Shift or C
+##   Swing net  R1 or R2    / J or E
 ##   Art style  Select      / T   (rubber hose on/off)
 ##   Restart    Start       / Enter
 
@@ -35,19 +33,14 @@ static func setup() -> void:
 	_key("crouch", KEY_C)
 	_button("crouch", JOY_BUTTON_LEFT_SHOULDER)
 
-	_action("aim")
-	_key("aim", KEY_Q)
-	_axis("aim", JOY_AXIS_TRIGGER_LEFT, 1.0)
+	_axis("crouch", JOY_AXIS_TRIGGER_LEFT, 1.0)
 
 	_action("net")
 	_key("net", KEY_J)
 	_key("net", KEY_E)
 	_button("net", JOY_BUTTON_RIGHT_SHOULDER)
 
-	_action("tranq")
-	_key("tranq", KEY_F)
-	_key("tranq", KEY_K)
-	_axis("tranq", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	_axis("net", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
 	_action("jump")
 	_key("jump", KEY_SPACE)

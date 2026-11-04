@@ -15,9 +15,7 @@ var player: CharacterBody3D
 var caught := 0
 var count_label: Label
 var mode_label: Label
-var darts_label: Label
 var alert_label: Label
-var crosshair: Control
 var game_over := false
 var hint_label: Label
 var message_label: Label
@@ -47,12 +45,6 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("style"):
 		Util.set_rubber(get_tree(), not Util.rubber)
 	_dance_trees()
-	if player and crosshair:
-		crosshair.visible = player.aiming and not game_over
-		crosshair.modulate = Color(1, 0.25, 0.2) if player.aim_on_target else Color(1, 0.95, 0.6)
-	if player and darts_label:
-		darts_label.text = "Darts: %d" % player.darts
-		darts_label.modulate = Color(1, 0.45, 0.35) if player.darts == 0 else Color(1, 0.9, 0.5)
 	if player and mode_label:
 		mode_label.text = player.move_mode
 		var loud: bool = player.move_mode.begins_with("Running")
@@ -261,12 +253,6 @@ func _build_hud() -> void:
 	mode_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(mode_label)
 
-	darts_label = Label.new()
-	darts_label.position = Vector2(24, 96)
-	darts_label.add_theme_font_size_override("font_size", 24)
-	darts_label.add_theme_constant_override("outline_size", 6)
-	darts_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(darts_label)
 
 	alert_label = Label.new()
 	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -278,26 +264,10 @@ func _build_hud() -> void:
 	alert_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(alert_label)
 
-	# Crosshair drawn from rectangles so it sits exactly on the screen center.
-	crosshair = Control.new()
-	crosshair.set_anchors_preset(Control.PRESET_CENTER)
-	crosshair.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	crosshair.visible = false
-	layer.add_child(crosshair)
-	var arms := [Rect2(-15, -1, 10, 2), Rect2(5, -1, 10, 2), Rect2(-1, -15, 2, 10), Rect2(-1, 5, 2, 10), Rect2(-1.5, -1.5, 3, 3)]
-	for pass_i in 2:
-		for r in arms:
-			var bar := ColorRect.new()
-			var grow := 1.0 if pass_i == 0 else 0.0
-			bar.position = r.position - Vector2(grow, grow)
-			bar.size = r.size + Vector2(grow, grow) * 2.0
-			bar.color = Color(0, 0, 0, 0.8) if pass_i == 0 else Color.WHITE
-			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-			crosshair.add_child(bar)
 
 	hint_label = Label.new()
 	var hint := hint_label
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Look: R-stick  Style: Select  Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1/L2  Net: R1/R2  Look: R-stick  Style: Select  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44

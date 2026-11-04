@@ -2,7 +2,7 @@ extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick. Light push sneaks, full push runs.
 ##   Right side: drag anywhere empty to look around.
-##   Buttons:    Jump, Net, Fire, plus Crouch and Aim toggles.
+##   Buttons:    Jump, Net, and a Crouch toggle.
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -14,7 +14,7 @@ var stick_vec := Vector2.ZERO
 var look_finger := -1
 var look_last := Vector2.ZERO
 var button_fingers := {}       # finger index -> button name
-var toggles := {"crouch": false, "aim": false}
+var toggles := {"crouch": false}
 var buttons := {}              # name -> {pos, radius, label, action, toggle}
 
 
@@ -34,8 +34,6 @@ func _layout() -> void:
 	buttons = {
 		"jump":   {"pos": Vector2(right, bottom), "radius": r, "label": "JUMP", "action": "jump", "toggle": false},
 		"net":    {"pos": Vector2(right - 115, bottom + 10), "radius": r, "label": "NET", "action": "net", "toggle": false},
-		"fire":   {"pos": Vector2(right - 20, bottom - 120), "radius": r, "label": "FIRE", "action": "tranq", "toggle": false},
-		"aim":    {"pos": Vector2(right - 130, bottom - 105), "radius": 38.0, "label": "AIM", "action": "aim", "toggle": true},
 		"crouch": {"pos": Vector2(right - 225, bottom + 25), "radius": 38.0, "label": "CROUCH", "action": "crouch", "toggle": true},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 		"style": {"pos": Vector2(s.x - 60, 225), "radius": 30.0, "label": "STYLE", "action": "style", "toggle": false},
@@ -96,8 +94,8 @@ func _touch_move(finger: int, pos: Vector2) -> void:
 		var d := pos - look_last
 		look_last = pos
 		if player:
-			player.yaw -= d.x * LOOK_SENSITIVITY * (0.5 if player.aiming else 1.0)
-			player.pitch = clamp(player.pitch - d.y * LOOK_SENSITIVITY * (0.5 if player.aiming else 1.0), -1.2, 0.6)
+			player.yaw -= d.x * LOOK_SENSITIVITY
+			player.pitch = clamp(player.pitch - d.y * LOOK_SENSITIVITY, -1.2, 0.6)
 
 
 func _touch_up(finger: int) -> void:

@@ -26,13 +26,12 @@ Tagline: *Catch those damn dirty humans.*
 - **Setting for first area:** jungle planet
 - **Catch flow:** spot target, sneak up, tranq or net, beam them away
 - **Tools:**
-  - **Tranq pistol:** safe from range, but loud. Can alert nearby cavemen
   - **Net:** silent, but you have to sneak in close
 - **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
 - **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm
 - **Getting spotted (Ape Escape style):** the robot leaps, yells (nearby robots hear it) and runs. Chase him down or dart him. Lose him and he calms down. No countdowns, no game over for being seen. Tried burrows, instant game over and an area alert; the user disliked all three
-- **Tranq gun:** hold L2 to aim over the shoulder, R2 to fire. No auto-aim. Darts take a moment to kick in and the target yelps. Very limited darts (3 for now)
+- **Tranq gun: removed.** Tried auto-aim, real aiming, delayed knockout and 3 to 6 darts. Once spotting became harmless it was overpowered, so the game is net only for now
 - **Fail state:** none for now. Getting spotted costs you a chase, not the round
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
 - **Engine:** Godot 4.7
