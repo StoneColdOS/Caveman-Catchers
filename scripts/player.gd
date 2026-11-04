@@ -1,6 +1,7 @@
 extends CharacterBody3D
 ## The hero: a lanky old space chimp from the user's sketch. Droopy eye, X eye, chewed
-## ear, a cigarette floating at his mouth, harness, pouches, satchel, robot arm, net.
+## ear, a cigarette floating at his mouth, harness, pouches, a satchel he stuffs robots
+## into, and a robot arm.
 
 signal caught_one
 
@@ -15,8 +16,10 @@ const ACCEL := 30.0
 const GRAVITY := 20.0
 const JUMP_VELOCITY := 7.0
 const LOOK_SPEED := 2.6
-const NET_RANGE := 2.4
-const NET_COOLDOWN := 0.45
+const GRAB_RANGE := 1.7      # he has to get right up to them
+const GRAB_COOLDOWN := 0.5
+const GRAB_TIME := 0.45      # lunge forward, then stuff it over his shoulder
+const LUNGE_SPEED := 4.5     # little burst forward on every grab, so chases are winnable
 
 # How far each sound carries (meters).
 const RUN_NOISE := 9.0
@@ -36,6 +39,9 @@ var net_pivot: Node3D
 var camera_pivot: Node3D
 var camera: Camera3D
 var net_timer := 0.0
+var grab_timer := 0.0
+var satchel: Node3D
+var satchel_fill := 0
 var body_root: Node3D
 var head_pivot: Node3D
 var head_rot := Vector3.ZERO
@@ -115,10 +121,13 @@ func _build_visual() -> void:
 		body_root.add_child(Util.mesh(Util.box(Vector3(0.1, 0.13, 0.07)), gear, Vector3(x, 0.93, 0.27)))
 		body_root.add_child(Util.mesh(Util.box(Vector3(0.11, 0.045, 0.085)), gear.darkened(0.2), Vector3(x, 0.99, 0.275)))  # pouch flap
 		body_root.add_child(Util.mesh(Util.box(Vector3(0.015, 0.06, 0.01)), dark, Vector3(x, 0.93, 0.31)))
-	# Satchel on his back with a cross strap
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.34, 0.3, 0.14)), Color(0.45, 0.36, 0.24), Vector3(0, 1.12, -0.3)))
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.36, 0.12, 0.17)), Color(0.38, 0.3, 0.2), Vector3(0, 1.24, -0.31)))  # satchel flap
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.05, 0.05, 0.02)), Color(0.7, 0.62, 0.4), Vector3(0, 1.2, -0.4)))     # buckle
+	# Satchel on his back: caught robots get stuffed in here, and it bulges as it fills
+	satchel = Node3D.new()
+	satchel.position = Vector3(0, 1.12, -0.3)
+	body_root.add_child(satchel)
+	satchel.add_child(Util.mesh(Util.box(Vector3(0.34, 0.3, 0.14)), Color(0.45, 0.36, 0.24), Vector3.ZERO))
+	satchel.add_child(Util.mesh(Util.box(Vector3(0.36, 0.12, 0.17)), Color(0.38, 0.3, 0.2), Vector3(0, 0.12, -0.01)))  # flap
+	satchel.add_child(Util.mesh(Util.box(Vector3(0.05, 0.05, 0.02)), Color(0.7, 0.62, 0.4), Vector3(0, 0.08, -0.1)))   # buckle
 	var cross := Util.mesh(Util.box(Vector3(0.04, 0.62, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0.0, 1.22, 0.24))
 	cross.rotation.z = -0.6
 	body_root.add_child(cross)
@@ -215,34 +224,13 @@ func _build_visual() -> void:
 	claw.add_child(Util.mesh(Util.box(Vector3(0.03, 0.12, 0.03)), metal, Vector3(-0.04, -0.09, 0.04)))
 	claw.add_child(Util.mesh(Util.box(Vector3(0.03, 0.12, 0.03)), metal, Vector3(0.04, -0.09, 0.04)))
 
-	# Net in his right hand (chimp hand)
+	# His right hand (chimp hand) does the grabbing
 	net_pivot = Node3D.new()
 	net_pivot.position = Vector3(-0.4, 0.78, 0.08)
 	body_root.add_child(net_pivot)
 	net_pivot.add_child(Util.mesh(Util.sphere(0.075), face, Vector3.ZERO))
-	var handle := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.03
-	cyl.bottom_radius = 0.03
-	cyl.height = 1.2
-	cyl.radial_segments = 6
-	handle.mesh = cyl
-	handle.material_override = Util.mat(Color(0.6, 0.65, 0.68))
-	handle.rotation.x = PI / 2.0
-	handle.position = Vector3(0, 0, 0.6)
-	net_pivot.add_child(handle)
-	var ring := MeshInstance3D.new()
-	var torus := TorusMesh.new()
-	torus.inner_radius = 0.3
-	torus.outer_radius = 0.36
-	torus.rings = 10
-	torus.ring_segments = 4
-	ring.mesh = torus
-	ring.material_override = Util.mat(Color(0.91, 0.51, 0.23))
-	ring.rotation.z = PI / 2.0
-	ring.position = Vector3(0, 0, 1.45)
-	net_pivot.add_child(ring)
-	_rest_net()
+	for f in 3:
+		net_pivot.add_child(Util.mesh(Util.box(Vector3(0.025, 0.025, 0.07)), face.darkened(0.1), Vector3(-0.04 + f * 0.04, -0.03, 0.07)))
 
 
 func _make_noodle(count: int, radius: float, color: Color, stripe: Color) -> Array:
@@ -361,7 +349,11 @@ func _animate(delta: float, on_floor: bool) -> void:
 		net_hand.z += sin(beat * 0.5) * 0.06 * amp
 		claw_hand.z -= sin(beat * 0.5) * 0.08 * amp
 		claw_hand.y += absf(sin(beat * 0.5)) * 0.06 * amp
-	net_pivot.position = net_pivot.position.lerp(net_hand, clampf(14.0 * delta, 0.0, 1.0))
+	if grab_timer > 0.0:
+		# Lunge the hand out, then swing it back over his shoulder to the satchel
+		var g := 1.0 - grab_timer / GRAB_TIME
+		net_hand = Vector3(-0.12, 1.15, 0.8) if g < 0.45 else Vector3(-0.15, 1.6, -0.35)
+	net_pivot.position = net_pivot.position.lerp(net_hand, clampf((24.0 if grab_timer > 0.0 else 14.0) * delta, 0.0, 1.0))
 	claw.position = claw.position.lerp(claw_hand, clampf(14.0 * delta, 0.0, 1.0))
 	var bt := body_root.transform
 	_noodle(right_arm, bt * Vector3(-0.3, 1.38, 0), bt * net_pivot.position, 0.8, Vector3(-1.0, -0.5, -0.3))
@@ -464,28 +456,47 @@ func _physics_process(delta: float) -> void:
 	# Net
 	net_timer -= delta
 	if net_timer <= 0.0 and Input.is_action_just_pressed("net"):
-		swing_net()
+		grab()
+	grab_timer = maxf(0.0, grab_timer - delta)
 
 
-func swing_net() -> void:
-	net_timer = NET_COOLDOWN
-	net_pivot.rotation = Vector3(0, -1.3, 0)
-	var tw := create_tween()
-	tw.tween_property(net_pivot, "rotation:y", 1.3, 0.18)
-	tw.tween_callback(_rest_net)
-
+## Grab: lunge forward, snatch the nearest robot in front of him and stuff it in the satchel.
+func grab() -> void:
+	net_timer = GRAB_COOLDOWN
+	grab_timer = GRAB_TIME
 	var fwd := visual.global_basis.z
 	fwd.y = 0.0
 	fwd = fwd.normalized()
+	if is_on_floor():
+		velocity.x += fwd.x * LUNGE_SPEED
+		velocity.z += fwd.z * LUNGE_SPEED
+	var best: Node = null
+	var best_dist := GRAB_RANGE
 	for g in get_tree().get_nodes_in_group("gatherers"):
 		if not g.can_be_netted():
 			continue
 		var to: Vector3 = g.global_position - global_position
 		to.y = 0.0
 		var dist := to.length()
-		if dist < NET_RANGE and (dist < 0.9 or fwd.dot(to / dist) > 0.35):
-			g.catch()
-			caught_one.emit()
+		if dist < best_dist and (dist < 0.9 or fwd.dot(to / dist) > 0.35):
+			best = g
+			best_dist = dist
+	if best:
+		best.catch(satchel)
+		caught_one.emit()
+		get_tree().create_timer(0.4).timeout.connect(_stuffed)
+
+
+## A robot just landed in the bag: it bulges a bit more and rattles.
+func _stuffed() -> void:
+	satchel_fill += 1
+	var full := 1.0 + minf(satchel_fill, 5) * 0.1
+	var tw := create_tween()
+	tw.tween_property(satchel, "scale", Vector3(full * 1.25, full * 1.2, full * 1.5), 0.08)
+	tw.tween_property(satchel, "scale", Vector3(full, full, full * 1.15), 0.2).set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
+	for i in 4:
+		tw.parallel().tween_property(satchel, "rotation:z", 0.25 * (1 if i % 2 == 0 else -1), 0.05).set_delay(i * 0.05)
+	tw.tween_property(satchel, "rotation:z", 0.0, 0.08)
 
 
 ## Sends a sound out. Any caveman inside the radius hears it.
@@ -517,8 +528,3 @@ func _animate_smoke() -> void:
 		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.62 * (1.0 - life * life)
 	var glow := 0.75 + 0.25 * sin(t * 3.0)
 	(cig_tip.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35 * glow + 0.1, 0.05)
-
-
-## Net held upright beside him when not swinging.
-func _rest_net() -> void:
-	net_pivot.rotation = Vector3(-1.2, -0.2, 0)

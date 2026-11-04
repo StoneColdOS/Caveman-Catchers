@@ -21,16 +21,16 @@ Tagline: *Catch those damn dirty humans.*
 
 - **Name:** Caveman Catchers (working title)
 - **Perspective and look:** 3D, faceted low-poly (flat shading, every face its own plane) with chunky mottled pixel textures, like the user's Blender reference ([in game](concept/style-pixel-lowpoly.png)). Rubber hose animation on top
-- **Hero:** a lanky old space chimp, from the user's sketch ([sketch](concept/hero-sketch.png), [in game](concept/hero-ingame.png)). No helmet. Hair tuft, brow ridge, muzzle, droopy half-lidded eye and an X eye, a chewed left ear, a cigarette floating at his mouth (cartoon style, doesn't bob with his head) with thick smoke that trails behind him, V harness, belt with three pouches, satchel on his back, wristbands, knee pads, banded boots with soles, chest and shoulder pads, robot arm on his left, net in his right hand. Long noodle limbs (rubber hose). Worn grey suit with olive gear. Gruff vet who hates the robots that replaced him
+- **Hero:** a lanky old space chimp, from the user's sketch ([sketch](concept/hero-sketch.png), [in game](concept/hero-ingame.png)). No helmet. Hair tuft, brow ridge, muzzle, droopy half-lidded eye and an X eye, a chewed left ear, a cigarette floating at his mouth (cartoon style, doesn't bob with his head) with thick smoke that trails behind him, V harness, belt with three pouches, satchel on his back, wristbands, knee pads, banded boots with soles, chest and shoulder pads, robot arm on his left, grabbing with his right (chimp) hand. Long noodle limbs (rubber hose). Worn grey suit with olive gear. Gruff vet who hates the robots that replaced him
 - **Targets:** escaped cavemen and cavewomen
 - **Setting for first area:** jungle planet
-- **Catch flow:** spot target, sneak up, net them, beam them away
+- **Catch flow:** spot target, sneak up close, grab them and stuff them in his satchel. No net (the user disliked the big net, and it was Ape Escape's signature anyway). The satchel bulges and rattles as it fills
 - **Tools:**
   - **Net:** silent, but you have to sneak in close
 - **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
 - **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm
-- **Getting spotted (Ape Escape style):** the robot leaps, yells (nearby robots hear it) and runs. Chase him down and net him. Lose him and he calms down. No countdowns, no game over for being seen. Tried burrows, instant game over and an area alert; the user disliked all three
+- **Getting spotted (Ape Escape style):** the robot leaps, yells (nearby robots hear it) and runs. Chase him down and grab him. Lose him and he calms down. No countdowns, no game over for being seen. Tried burrows, instant game over and an area alert; the user disliked all three
 - **Tranq gun: removed.** Tried auto-aim, real aiming, delayed knockout and 3 to 6 darts. Once spotting became harmless it was overpowered, so the game is net only for now
 - **Fail state:** none for now. Getting spotted costs you a chase, not the round
 - **Target platform:** AYN Thor (Android handheld, dual sticks). Desktop builds for testing
@@ -71,6 +71,6 @@ Each future type should have one clear reaction, so players can read a situation
 2. Who sends the hero, and is he a bounty hunter, an agent, something else?
 3. Final caveman roster and looks
 4. Hero's final look (the user has a sketch to build from)
-5. Gadget list beyond the net
+5. Gadget list beyond the grab
 6. Level structure: hub world with missions, or linear levels?
 7. Is the Thor the only target, or also PC/Mac later?

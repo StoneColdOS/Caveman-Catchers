@@ -18,6 +18,7 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
   - Robots bob in sync to the beat, waddle, scissor-run with arms straight up, heads boing up on spring necks when startled
   - Trees sway to the beat
 - [x] Playtest: removed the old-film filter and the hero's outline (robots and world keep theirs). Rubber hose animation stays
+- [x] Net replaced: grab robots and stuff them in the satchel (R1/R2). Short range with a forward lunge; the satchel bulges and rattles as it fills
 - [x] Pixel low-poly look from the user's reference: faceted flat shading on every shape, mottled 16x16 pixel textures (nearest filtering, triplanar)
 - [x] Playtest tweaks: no helmet, cigarette floats still at his mouth, thicker trailing smoke, more 3D shape on hero and robots (brow, muzzle, chest, pads, pouch flaps, soles; robot panels, rivets, bezel), no flat toon shading, cool back light for depth
 - [x] New hero from the user's sketch: lanky chimp with helmet, droopy eye + X eye, chewed ear, cigarette through the helmet, harness, pouches, satchel, knee pads, robot arm

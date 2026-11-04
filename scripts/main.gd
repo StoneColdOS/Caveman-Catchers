@@ -274,7 +274,7 @@ func _build_hud() -> void:
 
 	hint_label = Label.new()
 	var hint := hint_label
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1/L2  Net: R1/R2  Look: R-stick  Style: Select  Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1/L2  Grab: R1/R2  Look: R-stick  Style: Select  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44

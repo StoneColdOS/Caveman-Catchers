@@ -449,27 +449,27 @@ func is_fleeing() -> bool:
 	return state == State.FLEE
 
 
-func catch() -> void:
+## Caught: yanked off his feet, spun, shrunk and stuffed into the bag.
+func catch(into: Node3D = null) -> void:
 	state = State.CAUGHT
 	collision_layer = 0
 	collision_mask = 0
 	alert.text = ""
 	cone.visible = false
-	var beam := MeshInstance3D.new()
-	var cyl := CylinderMesh.new()
-	cyl.top_radius = 0.7
-	cyl.bottom_radius = 0.7
-	cyl.height = 30.0
-	cyl.radial_segments = 10
-	beam.mesh = cyl
-	beam.material_override = Util.mat(Color(0.5, 0.95, 1.0, 0.45), true)
-	beam.position.y = 15.0
-	add_child(beam)
+	if into == null:
+		queue_free()
+		return
+	var start := global_position
 	var tw := create_tween()
-	tw.tween_property(visual, "position:y", 4.0, 0.7).set_ease(Tween.EASE_IN)
-	tw.parallel().tween_property(visual, "scale", Vector3(0.1, 2.0, 0.1), 0.7).set_ease(Tween.EASE_IN)
-	tw.tween_property(beam, "scale", Vector3(0.01, 1, 0.01), 0.25)
-	tw.tween_callback(queue_free)
+	tw.set_parallel(true)
+	tw.tween_method(func(u: float):
+		if is_instance_valid(into):
+			var target := into.global_position
+			global_position = start.lerp(target, u) + Vector3.UP * sin(u * PI) * 1.2
+		, 0.0, 1.0, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	tw.tween_property(visual, "scale", Vector3.ONE * 0.08, 0.4).set_ease(Tween.EASE_IN)
+	tw.tween_property(visual, "rotation:x", TAU * 1.5, 0.4)
+	tw.chain().tween_callback(queue_free)
 
 
 # --- Helpers

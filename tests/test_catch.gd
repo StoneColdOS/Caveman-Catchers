@@ -31,26 +31,27 @@ func _run() -> void:
 		max_y = max(max_y, g1.global_position.y)
 	_check(g1.is_fleeing(), "Spotted: he runs away")
 	_check(max_y > 0.5, "Gatherer jumps when he spots you")
-	# Stop him in time: chase him down and net him.
+	# Chase him down and grab him.
 	player.global_position = g1.global_position - g1.velocity.normalized() * 1.2
 	player.visual.rotation.y = atan2(g1.velocity.x, g1.velocity.z)
 	await _frames(1)
-	player.swing_net()
-	_check(g1.is_caught(), "You can chase down a runner and net him")
+	player.grab()
+	_check(g1.is_caught(), "You can chase down a runner and grab him")
 	await _frames(5)
 
-	# --- 2. Crouch-sneak up behind another one and net him.
+	# --- 2. Crouch-sneak up behind another one and grab him.
 	var g2 = gs[2]
 	Input.action_press("crouch")
-	player.global_position = g2.global_position + Vector3(0, 0, -1.6)
+	player.global_position = g2.global_position + Vector3(0, 0, -1.3)
 	player.visual.rotation.y = 0.0
 	await _frames(30)
 	_check(g2.state == g2.State.WANDER, "Gatherer doesn't notice you creeping up behind him")
-	player.swing_net()
-	_check(g2.is_caught(), "Net catches the Gatherer")
+	player.grab()
+	_check(g2.is_caught(), "Grab catches the robot")
 	_check(main.caught == 2, "Catch counter goes up")
 	await _frames(80)
-	_check(not is_instance_valid(g2), "Caught Gatherer gets beamed away")
+	_check(not is_instance_valid(g2), "Caught robot gets stuffed in the satchel")
+	_check(player.satchel_fill == 2 and player.satchel.scale.x > 1.05, "Satchel bulges more with each catch")
 	Input.action_release("crouch")
 	await _frames(5)
 

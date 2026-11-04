@@ -13,11 +13,11 @@ Built in Godot 4.7, targeting the AYN Thor handheld.
 
 ## Current state: Prototype 4
 
-Placeholder shapes. A grumpy old space chimp with a net hunts five janky robot monkeys in a jungle clearing. Rubber hose animation (STYLE button / Select / T to compare with plain).
+Placeholder shapes. A grumpy old space chimp hunts five janky robot monkeys and stuffs them in his satchel, in a jungle clearing. Rubber hose animation (STYLE button / Select / T to compare with plain).
 
 - **Green cone:** he's calm and hasn't seen you
 - **Yellow "?":** he sees you and is getting suspicious. Duck out of sight and he'll calm down
-- **Red "!":** he spotted you and runs, panic-hopping. Chase him down and net him, or let him lose you and he'll calm down
+- **Red "!":** he spotted you and runs, panic-hopping. Chase him down and grab him, or let him lose you and he'll calm down
 - Crouching shrinks how far they can see you. Rocks and trees block their view.
 
 | | Thor / gamepad | Keyboard |
@@ -27,7 +27,7 @@ Placeholder shapes. A grumpy old space chimp with a net hunts five janky robot m
 | Sneak vs run | Light vs full stick tilt | Hold Ctrl to sneak |
 | Jump | A (bottom button) | Space |
 | Crouch | L1 or L2 | Shift or C |
-| Swing net | R1 or R2 | J or E |
+| Grab (stuff in satchel) | R1 or R2 | J or E |
 | Restart | Start | Enter |
 
 ## Running it

@@ -6,7 +6,7 @@ extends RefCounted
 ##   Camera     right stick / arrow keys
 ##   Jump       A (bottom)  / Space
 ##   Crouch     L1 or L2    / Shift or C
-##   Swing net  R1 or R2    / J or E
+##   Grab       R1 or R2    / J or E   (stuff a robot in the satchel)
 ##   Art style  Select      / T   (rubber hose on/off)
 ##   Restart    Start       / Enter
 
