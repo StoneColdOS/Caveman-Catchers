@@ -21,7 +21,7 @@ Tagline: *Catch those damn dirty humans.*
 
 - **Name:** Caveman Catchers (working title)
 - **Perspective:** 3D, PS1-style low-poly with crunchy, low-res textures
-- **Hero:** an ape in a 1960s retro spacesuit with a bubble helmet. Face kept mostly hidden in shadow for mystery. Exact look to be designed later by the user
+- **Hero:** a lanky old space chimp, from the user's sketch ([sketch](concept/hero-sketch.png), [in game](concept/hero-ingame.png)). Bubble helmet, hair tuft, droopy half-lidded eye and an X eye, a chewed left ear, cigarette poking out through the helmet glass, V harness, belt with three pouches, satchel on his back, wristbands, knee pads, banded boots, robot arm on his left, net in his right hand. Long noodle limbs (rubber hose). Worn grey suit with olive gear. Gruff vet who hates the robots that replaced him
 - **Targets:** escaped cavemen and cavewomen
 - **Setting for first area:** jungle planet
 - **Catch flow:** spot target, sneak up, net them, beam them away

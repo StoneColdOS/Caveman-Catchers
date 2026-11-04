@@ -1,6 +1,6 @@
 extends CharacterBody3D
-## The hero: a grumpy old space chimp. Shadowed eyes, cigarette, smoke stuck in his
-## helmet, a robot arm and a net. Placeholder shapes until the real model.
+## The hero: a lanky old space chimp from the user's sketch. Droopy eye, X eye, chewed
+## ear, cigarette poking through his helmet, harness, pouches, satchel, robot arm, net.
 
 signal caught_one
 
@@ -45,6 +45,9 @@ var feet: Array = []
 var right_arm: Array = []
 var robot_arm: Array = []
 var claw: MeshInstance3D
+var knee_pads: Array = []
+var right_band: MeshInstance3D
+var smoke_origin: Array = []
 var walk_phase := 0.0
 var cig_tip: MeshInstance3D
 var smoke: Node3D
@@ -60,9 +63,9 @@ func _ready() -> void:
 	var shape := CollisionShape3D.new()
 	var cap := CapsuleShape3D.new()
 	cap.radius = 0.4
-	cap.height = 1.6
+	cap.height = 1.9
 	shape.shape = cap
-	shape.position.y = 0.8
+	shape.position.y = 0.95
 	add_child(shape)
 
 	_build_visual()
@@ -76,80 +79,122 @@ func _ready() -> void:
 func _build_visual() -> void:
 	visual = Node3D.new()
 	add_child(visual)
-	var suit := Color(0.79, 0.73, 0.56)
-	var boots := Color(0.56, 0.18, 0.18)
+	# Colors pulled from the inspo: worn grey suit, olive gear, brown fur
+	var suit := Color(0.4, 0.43, 0.45)
+	var gear := Color(0.37, 0.38, 0.27)
+	var dark := Color(0.16, 0.16, 0.15)
 	var metal := Color(0.55, 0.6, 0.64)
-	var fur := Color(0.36, 0.25, 0.18)
-	var face := Color(0.72, 0.58, 0.48)
+	var fur := Color(0.33, 0.23, 0.16)
+	var face := Color(0.85, 0.72, 0.6)
+	var ink := Color(0.07, 0.06, 0.05)
 
 	# Everything above the hips lives on body_root, which bounces, leans and squashes.
 	body_root = Node3D.new()
 	visual.add_child(body_root)
-	body_root.add_child(Util.mesh(Util.capsule(0.34, 0.86), suit, Vector3(0, 1.0, 0)))
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.74, 0.1, 0.72)), Color(0.17, 0.14, 0.12), Vector3(0, 0.72, 0)))
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.32, 0.24, 0.14)), Color(0.36, 0.42, 0.46), Vector3(0, 1.08, 0.32)))
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.08, 0.06, 0.02)), Color(0.31, 0.82, 0.55), Vector3(0, 1.08, 0.4), false))
-	body_root.add_child(Util.mesh(Util.sphere(0.1), Color(0.91, 0.51, 0.23), Vector3(-0.36, 1.2, 0)))
+	body_root.add_child(Util.mesh(Util.capsule(0.25, 0.62), suit, Vector3(0, 1.2, 0)))
+	# V harness straps meeting at the belt
+	for side in [-1.0, 1.0]:
+		var strap := Util.mesh(Util.box(Vector3(0.05, 0.5, 0.03)), gear, Vector3(0.08 * side, 1.2, 0.235))
+		strap.rotation.z = 0.32 * side
+		body_root.add_child(strap)
+	# Belt with three pouches
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.56, 0.07, 0.52)), dark, Vector3(0, 0.95, 0)))
+	for x in [-0.13, 0.0, 0.13]:
+		body_root.add_child(Util.mesh(Util.box(Vector3(0.1, 0.13, 0.07)), gear, Vector3(x, 0.93, 0.27)))
+		body_root.add_child(Util.mesh(Util.box(Vector3(0.015, 0.06, 0.01)), dark, Vector3(x, 0.93, 0.31)))
+	# Satchel on his back with a cross strap
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.34, 0.3, 0.14)), Color(0.45, 0.36, 0.24), Vector3(0, 1.12, -0.3)))
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.34, 0.08, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0, 1.24, -0.375)))
+	var cross := Util.mesh(Util.box(Vector3(0.04, 0.62, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0.0, 1.22, 0.24))
+	cross.rotation.z = -0.6
+	body_root.add_child(cross)
+	# Robot arm's shoulder joint (his left)
+	body_root.add_child(Util.mesh(Util.sphere(0.09), Color(0.91, 0.51, 0.23), Vector3(0.3, 1.38, 0)))
 
-	# Head on a springy pivot: fur, ears, muzzle, a band of shadow for eyes
+	# Head on a springy pivot inside a bubble helmet
 	head_pivot = Node3D.new()
-	head_pivot.position = Vector3(0, 1.42, 0)
+	head_pivot.position = Vector3(0, 1.5, 0)
 	body_root.add_child(head_pivot)
-	head_pivot.add_child(Util.mesh(Util.sphere(0.24), fur, Vector3(0, 0.18, 0)))
-	head_pivot.add_child(Util.mesh(Util.sphere(0.08), face, Vector3(-0.24, 0.18, 0)))
-	head_pivot.add_child(Util.mesh(Util.sphere(0.08), face, Vector3(0.24, 0.18, 0)))
-	var muzzle := Util.mesh(Util.sphere(0.15), face, Vector3(0, 0.08, 0.15))
-	muzzle.scale = Vector3(1.2, 0.85, 0.9)
-	head_pivot.add_child(muzzle)
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.38, 0.09, 0.08)), Color(0.04, 0.03, 0.03), Vector3(0, 0.24, 0.19), false))
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.4, 0.05, 0.1)), Color(0.24, 0.17, 0.12), Vector3(0, 0.3, 0.18)))
-	var cig := Util.mesh(Util.box(Vector3(0.03, 0.03, 0.2)), Color(0.95, 0.93, 0.88), Vector3(0.08, 0.05, 0.34))
-	cig.rotation.y = 0.35
+	head_pivot.add_child(Util.mesh(Util.sphere(0.26), fur, Vector3(0, 0.24, 0)))
+	for tuft in [[-0.04, 0.3, 0.15], [0.06, 0.25, -0.2]]:
+		var spike := Util.mesh(Util.box(Vector3(0.05, 0.16, 0.05)), fur, Vector3(tuft[0], 0.52, 0.02))
+		spike.rotation = Vector3(0, 0, tuft[2] * 2.0)
+		head_pivot.add_child(spike)
+	var mask := Util.mesh(Util.sphere(0.2), face, Vector3(0, 0.2, 0.11))
+	mask.scale = Vector3(1.05, 1.0, 0.75)
+	head_pivot.add_child(mask)
+	# His right ear: plain. His left ear: big, with a bite chewed out of it.
+	head_pivot.add_child(Util.mesh(Util.sphere(0.08), face, Vector3(-0.26, 0.22, 0)))
+	for e in [[0.28, 0.3, 0.0], [0.34, 0.2, -0.01], [0.3, 0.11, 0.03]]:
+		head_pivot.add_child(Util.mesh(Util.sphere(0.065), face, Vector3(e[0], e[1], e[2])))
+	# Droopy half-lidded eye (his right) and an X for the other one
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.05, 0.035, 0.02)), ink, Vector3(-0.07, 0.222, 0.262), false))
+	var lid := Util.mesh(Util.box(Vector3(0.075, 0.018, 0.02)), ink, Vector3(-0.07, 0.243, 0.26), false)
+	lid.rotation.z = -0.25
+	head_pivot.add_child(lid)
+	for r in [0.785, -0.785]:
+		var stroke := Util.mesh(Util.box(Vector3(0.075, 0.016, 0.02)), ink, Vector3(0.07, 0.235, 0.255), false)
+		stroke.rotation.z = r
+		head_pivot.add_child(stroke)
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.025, 0.02, 0.02)), ink, Vector3(0.0, 0.17, 0.27), false))   # nose
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.09, 0.014, 0.02)), ink, Vector3(0.0, 0.12, 0.262), false))  # mouth
+	# Cigarette poking out through the helmet glass, glowing tip outside
+	var cig := Util.mesh(Util.box(Vector3(0.03, 0.03, 0.5)), Color(0.95, 0.93, 0.88), Vector3(-0.14, 0.08, 0.42))
+	cig.rotation = Vector3(0.25, -0.55, 0)
 	head_pivot.add_child(cig)
 	cig_tip = MeshInstance3D.new()
-	cig_tip.mesh = Util.sphere(0.022)
+	cig_tip.mesh = Util.sphere(0.024)
 	cig_tip.material_override = Util.mat(Color(1.0, 0.45, 0.1), true)
-	cig_tip.position = Vector3(0.115, 0.05, 0.43)
+	cig_tip.position = Vector3(-0.27, 0.02, 0.62)
 	head_pivot.add_child(cig_tip)
-	smoke = Node3D.new()
-	smoke.position = Vector3(0, 0.18, 0)
-	head_pivot.add_child(smoke)
-	for i in 7:
-		var puff := MeshInstance3D.new()
-		puff.mesh = Util.sphere(0.07)
-		puff.material_override = Util.mat(Color(0.85, 0.88, 0.9, 0.35), true)
-		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		smoke.add_child(puff)
-	var helmet := Util.mesh(Util.sphere(0.4), Color(0.8, 0.9, 0.95, 0.22), Vector3(0, 0.18, 0))
+	var helmet := Util.mesh(Util.sphere(0.44), Color(0.8, 0.9, 0.95, 0.2), Vector3(0, 0.24, 0))
 	helmet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	head_pivot.add_child(helmet)
-	var ant := Util.mesh(Util.box(Vector3(0.03, 0.32, 0.03)), metal, Vector3(0.16, 0.66, 0))
-	ant.rotation.z = -0.35
-	head_pivot.add_child(ant)
-	var light := MeshInstance3D.new()
-	light.mesh = Util.sphere(0.06)
-	light.material_override = Util.mat(Color(1.0, 0.3, 0.2), true)
-	light.position = Vector3(0.22, 0.83, 0)
-	head_pivot.add_child(light)
+	var collar := CylinderMesh.new()
+	collar.top_radius = 0.2
+	collar.bottom_radius = 0.22
+	collar.height = 0.07
+	collar.radial_segments = 10
+	head_pivot.add_child(Util.mesh(collar, metal, Vector3(0, -0.17, 0)))  # helmet collar
+	# Smoke trails up from the tip in world space
+	smoke = Node3D.new()
+	smoke.top_level = true
+	add_child(smoke)
+	for i in 8:
+		var puff := MeshInstance3D.new()
+		puff.mesh = Util.sphere(0.06)
+		puff.material_override = Util.mat(Color(0.9, 0.92, 0.94, 0.45), true)
+		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		smoke.add_child(puff)
+		smoke_origin.append(Vector3.ZERO)
 
-	# Noodle limbs: chains of overlapping balls bent along a curve every frame.
+	# Long, lanky noodle limbs
 	for side in [-1.0, 1.0]:
-		legs.append(_make_noodle(11, 0.07, suit.darkened(0.08), Color()))
-		var shoe := Util.mesh(Util.sphere(0.13), boots, Vector3(0.16 * side, 0.08, 0.05))
-		shoe.scale = Vector3(1.05, 0.7, 1.7)
-		visual.add_child(shoe)
-		feet.append(shoe)
-	right_arm = _make_noodle(9, 0.055, suit, Color())
-	robot_arm = _make_noodle(10, 0.06, metal, Color(0.32, 0.36, 0.4))  # accordion-striped spring arm
-	claw = Util.mesh(Util.sphere(0.09), Color(0.4, 0.45, 0.5), Vector3.ZERO)
-	claw.scale = Vector3(1, 0.8, 1.2)
+		legs.append(_make_noodle(14, 0.06, suit, Color()))
+		var pad := Util.mesh(Util.sphere(0.085), dark, Vector3.ZERO)
+		pad.scale = Vector3(1, 1.15, 0.7)
+		visual.add_child(pad)
+		knee_pads.append(pad)
+		var boot := Util.mesh(Util.sphere(0.12), dark, Vector3(0.14 * side, 0.08, 0.05))
+		boot.scale = Vector3(1.0, 0.75, 1.6)
+		visual.add_child(boot)
+		boot.add_child(Util.mesh(Util.box(Vector3(0.17, 0.05, 0.14)), gear, Vector3(0, 0.13, -0.03)))  # boot band
+		feet.append(boot)
+	right_arm = _make_noodle(12, 0.05, suit, Color())
+	robot_arm = _make_noodle(13, 0.055, metal, Color(0.32, 0.36, 0.4))  # accordion-striped spring arm
+	right_band = Util.mesh(Util.sphere(0.065), gear, Vector3.ZERO)
+	visual.add_child(right_band)
+	claw = Util.mesh(Util.sphere(0.08), Color(0.4, 0.45, 0.5), Vector3.ZERO)
+	claw.scale = Vector3(1, 0.8, 1.25)
 	body_root.add_child(claw)
+	claw.add_child(Util.mesh(Util.box(Vector3(0.03, 0.12, 0.03)), metal, Vector3(-0.04, -0.09, 0.04)))
+	claw.add_child(Util.mesh(Util.box(Vector3(0.03, 0.12, 0.03)), metal, Vector3(0.04, -0.09, 0.04)))
 
-	# Net in his gloved right hand
+	# Net in his right hand (chimp hand)
 	net_pivot = Node3D.new()
-	net_pivot.position = Vector3(0.45, 0.95, 0.05)
+	net_pivot.position = Vector3(-0.4, 0.78, 0.08)
 	body_root.add_child(net_pivot)
-	net_pivot.add_child(Util.mesh(Util.sphere(0.09), Color(0.97, 0.96, 0.92), Vector3.ZERO))  # white cartoon glove
+	net_pivot.add_child(Util.mesh(Util.sphere(0.075), face, Vector3.ZERO))
 	var handle := MeshInstance3D.new()
 	var cyl := CylinderMesh.new()
 	cyl.top_radius = 0.03
@@ -230,7 +275,7 @@ func _animate(delta: float, on_floor: bool) -> void:
 		stretch = (b - 0.5) * 0.14 * amp
 		sway = sin(beat * 0.25) * 0.12 * amp
 	if crouching:
-		body_y -= 0.32
+		body_y -= 0.4
 	var k := clampf(16.0 * delta, 0.0, 1.0)
 	body_root.position.y = lerp(body_root.position.y, body_y, k)
 	body_root.rotation.x = lerp_angle(body_root.rotation.x, lean, k)
@@ -265,24 +310,25 @@ func _animate(delta: float, on_floor: bool) -> void:
 			pitch_foot = -maxf(0.0, sin(beat)) * 0.5 * amp
 		feet[i].position = feet[i].position.lerp(foot, clampf(25.0 * delta, 0.0, 1.0))
 		feet[i].rotation.x = pitch_foot
-		var hip := body_root.transform * Vector3(0.15 * side, 0.66, 0)
-		_noodle(legs[i], hip, feet[i].position + Vector3(0, 0.07, -0.04), 0.68, Vector3(0.35 * side, 0.0, 1.0))
+		var hip := body_root.transform * Vector3(0.13 * side, 0.92, 0)
+		_noodle(legs[i], hip, feet[i].position + Vector3(0, 0.07, -0.04), 0.9, Vector3(0.35 * side, 0.0, 1.0))
+		knee_pads[i].position = legs[i][legs[i].size() / 2].position + Vector3(0, 0, 0.04)
 
 	# Arms (hand targets are in body space)
-	var net_hand := Vector3(0.45, 0.95, 0.05)
-	var claw_hand := Vector3(-0.48, 0.8, 0.0)
+	var net_hand := Vector3(-0.4, 0.78, 0.08)
+	var claw_hand := Vector3(0.4, 0.74, 0.02)
 	if not on_floor:
 		var f := sin(t * 18.0) * 0.15 * amp
-		net_hand = Vector3(0.6, 1.5 + f, 0.0)
-		claw_hand = Vector3(-0.62, 1.5 - f, 0.05)
+		net_hand = Vector3(-0.58, 1.78 + f, 0.0)
+		claw_hand = Vector3(0.58, 1.78 - f, 0.05)
 	elif moving and running:
 		var a := walk_phase * 2.0
-		claw_hand = Vector3(-0.5, 1.2, 0.0) + Vector3(0, sin(a), cos(a)) * 0.45 * amp  # windmill
-		net_hand = Vector3(0.45, 1.0, 0.05 - sin(walk_phase) * 0.35 * amp)
+		claw_hand = Vector3(0.42, 1.38, 0.0) + Vector3(0, sin(a), cos(a)) * 0.55 * amp  # windmill
+		net_hand = Vector3(-0.4, 0.85, 0.08 - sin(walk_phase) * 0.4 * amp)
 	elif moving and sneaky:
 		var w := sin(walk_phase) * 0.05 * amp
-		net_hand = Vector3(0.36, 1.25 + w, 0.32)   # hands up like claws, tiptoeing
-		claw_hand = Vector3(-0.32, 1.25 - w, 0.34)
+		net_hand = Vector3(-0.32, 1.36 + w, 0.32)   # hands up like claws, tiptoeing
+		claw_hand = Vector3(0.3, 1.36 - w, 0.34)
 	elif moving:
 		net_hand.z -= sin(walk_phase) * 0.28 * amp
 		claw_hand.z += sin(walk_phase) * 0.32 * amp
@@ -293,8 +339,9 @@ func _animate(delta: float, on_floor: bool) -> void:
 	net_pivot.position = net_pivot.position.lerp(net_hand, clampf(14.0 * delta, 0.0, 1.0))
 	claw.position = claw.position.lerp(claw_hand, clampf(14.0 * delta, 0.0, 1.0))
 	var bt := body_root.transform
-	_noodle(right_arm, bt * Vector3(0.36, 1.2, 0), bt * net_pivot.position, 0.62, Vector3(1.0, -0.5, -0.3))
-	_noodle(robot_arm, bt * Vector3(-0.36, 1.2, 0), bt * claw.position, 0.66, Vector3(-1.0, -0.5, -0.3))
+	_noodle(right_arm, bt * Vector3(-0.3, 1.38, 0), bt * net_pivot.position, 0.8, Vector3(-1.0, -0.5, -0.3))
+	_noodle(robot_arm, bt * Vector3(0.3, 1.38, 0), bt * claw.position, 0.84, Vector3(1.0, -0.5, -0.3))
+	right_band.position = right_arm[right_arm.size() - 3].position  # wristband
 
 	# Landing squash recovers on the whole figure
 	visual.scale = visual.scale.lerp(Vector3.ONE, clampf(10.0 * delta, 0.0, 1.0))
@@ -302,7 +349,7 @@ func _animate(delta: float, on_floor: bool) -> void:
 
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
-	camera_pivot.position.y = 1.4
+	camera_pivot.position.y = 1.6
 	add_child(camera_pivot)
 	arm = SpringArm3D.new()
 	arm.spring_length = 6.0
@@ -397,9 +444,9 @@ func _physics_process(delta: float) -> void:
 
 func swing_net() -> void:
 	net_timer = NET_COOLDOWN
-	net_pivot.rotation = Vector3(0, 1.3, 0)
+	net_pivot.rotation = Vector3(0, -1.3, 0)
 	var tw := create_tween()
-	tw.tween_property(net_pivot, "rotation:y", -1.3, 0.18)
+	tw.tween_property(net_pivot, "rotation:y", 1.3, 0.18)
 	tw.tween_callback(_rest_net)
 
 	var fwd := visual.global_basis.z
@@ -426,18 +473,23 @@ func make_noise(radius: float, color := Color(0, 0, 0, 0)) -> void:
 
 ## Puffs swirl slowly around inside the helmet; the cigarette tip pulses.
 func _animate_smoke() -> void:
+	# Each puff leaves the cigarette tip, drifts up and grows, then starts over.
 	var t := Time.get_ticks_msec() * 0.001
-	var i := 0
-	for puff in smoke.get_children():
-		var a := t * (0.6 + i * 0.07) + i * 0.9
-		var r := 0.2 + 0.06 * sin(t * 0.7 + i)
-		puff.position = Vector3(cos(a) * r, 0.1 + 0.12 * sin(t * 0.5 + i * 1.3), sin(a) * r * 0.8)
-		puff.scale = Vector3.ONE * (0.8 + 0.4 * sin(t + i))
-		i += 1
+	var tip := cig_tip.global_position
+	var n := smoke.get_child_count()
+	for i in n:
+		var puff: MeshInstance3D = smoke.get_child(i)
+		var life := fposmod(t * 0.45 + float(i) / n, 1.0)
+		if life < 0.05 or smoke_origin[i] == Vector3.ZERO:
+			smoke_origin[i] = tip
+		var o: Vector3 = smoke_origin[i]
+		puff.global_position = o + Vector3(sin(t * 2.0 + i) * 0.08 * life, life * 0.9, cos(t * 1.7 + i) * 0.06 * life)
+		puff.scale = Vector3.ONE * (0.5 + life * 1.6)
+		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.5 * (1.0 - life)
 	var glow := 0.75 + 0.25 * sin(t * 3.0)
 	(cig_tip.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35 * glow + 0.1, 0.05)
 
 
 ## Net held upright beside him when not swinging.
 func _rest_net() -> void:
-	net_pivot.rotation = Vector3(-1.2, 0.2, 0)
+	net_pivot.rotation = Vector3(-1.2, -0.2, 0)
