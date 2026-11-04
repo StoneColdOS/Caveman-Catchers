@@ -75,6 +75,10 @@ func _ready() -> void:
 
 	_build_visual()
 	_build_camera()
+	# No ink outline on the hero (the user prefers him clean); robots and world keep theirs.
+	for o in visual.find_children("", "MeshInstance3D", true, false):
+		if o.is_in_group("outlines"):
+			o.queue_free()
 
 
 func _build_visual() -> void:

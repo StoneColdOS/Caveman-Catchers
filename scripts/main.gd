@@ -20,7 +20,6 @@ var alert_label: Label
 var crosshair: Control
 var game_over := false
 var hint_label: Label
-var film: ColorRect
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -34,7 +33,6 @@ func _ready() -> void:
 	_build_cover()
 	_spawn_player()
 	_spawn_gatherers()
-	_build_film()
 	_build_hud()
 	_build_debug()
 	if use_touch():
@@ -48,8 +46,6 @@ func _process(delta: float) -> void:
 	_update_alert()
 	if Input.is_action_just_pressed("style"):
 		Util.set_rubber(get_tree(), not Util.rubber)
-	if film:
-		film.visible = Util.rubber
 	_dance_trees()
 	if player and crosshair:
 		crosshair.visible = player.aiming and not game_over
@@ -322,21 +318,6 @@ func _build_hud() -> void:
 	layer.add_child(message_label)
 
 	_update_hud()
-
-
-## Old-film filter over the 3D view (under the HUD so text stays crisp).
-func _build_film() -> void:
-	var layer := CanvasLayer.new()
-	layer.layer = 0
-	add_child(layer)
-	film = ColorRect.new()
-	film.set_anchors_preset(Control.PRESET_FULL_RECT)
-	film.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	var sm := ShaderMaterial.new()
-	sm.shader = load("res://shaders/film.gdshader")
-	film.material = sm
-	film.visible = Util.rubber
-	layer.add_child(film)
 
 
 ## Tree tops squash and sway to the beat in rubber hose mode.

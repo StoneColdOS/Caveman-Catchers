@@ -17,7 +17,8 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
   - Noodle limbs, big shoes, white glove; bouncy idle and toe-tap on a shared beat; tiptoe sneak with hands up; windmill run; midair flail; springy head; big landing squash
   - Robots bob in sync to the beat, waddle, scissor-run with arms straight up, heads boing up on spring necks when startled
   - Trees sway to the beat
-- [ ] Play it: does rubber hose feel like *your* game? Too much? Not enough?
+- [x] Playtest: removed the old-film filter and the hero's outline (robots and world keep theirs). Rubber hose animation stays
+- [ ] Tranq feels overpowered: pick a fix
 
 ---
 
