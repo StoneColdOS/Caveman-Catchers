@@ -32,7 +32,7 @@ func _run() -> void:
 	_check(g1.is_warning(), "Spotted: he runs to warn the tribe")
 	_check(max_y > 0.5, "Gatherer jumps when he spots you")
 	_check(g1.warn_timer > 0.0 and g1.warn_timer < g1.WARN_TIME, "Warning countdown is ticking")
-	_check(main.alert_label.text.begins_with("ALERT"), "HUD shows the alert")
+	_check(main.alert_label.text.begins_with("SPOTTED"), "HUD shows the spotted countdown")
 	# Stop him in time: chase him down and net him.
 	player.global_position = g1.global_position - g1.velocity.normalized() * 1.2
 	player.visual.rotation.y = atan2(g1.velocity.x, g1.velocity.z)
@@ -142,17 +142,50 @@ func _run() -> void:
 	player.darts = 0
 	_check(not player.fire_tranq(), "Out of darts: nothing fires")
 
-	# --- 6. Let a spotter get away: game over.
+	# --- 6. Let a spotter get away: he escapes for good, the area goes on alert, no game over.
 	player.global_position = Vector3(0, 0.1, 0)
 	await _frames(3)
 	g0.state = g0.State.SUSPICIOUS
 	g0._start_flee()
 	for i in 330:
 		await physics_frame
-		if main.game_over:
+		if main.escaped > 0:
 			break
-	_check(main.game_over, "Spotter gets away after the countdown: game over")
-	_check(main.message_label.text.contains("GAME OVER"), "Game over screen shows")
+	_check(main.escaped == 1, "Spotter gets away after the countdown")
+	_check(g0.escaped_for_good, "...and he's gone for good")
+	_check(main.area_alert > 0.0 and g3.alerted, "Everyone else goes on alert")
+	_check(main.alert_label.text.begins_with("AREA ALERT"), "HUD shows the area alert")
+	_check(g3._sight_range() > g3.SIGHT_RANGE * 1.2, "Alerted robots see further")
+	_check(main.game_over == false or main.caught + main.escaped >= 5, "No instant game over")
+	main.area_alert = 0.01
+	await _frames(5)
+	_check(not g3.alerted, "Alert wears off")
+
+	# --- 7. Touch controls drive the same actions.
+	var TouchScript := load("res://scripts/touch_controls.gd")
+	var t: Control = TouchScript.new()
+	t.player = player
+	main.add_child(t)
+	await _frames(2)
+	t._touch_down(0, Vector2(100, 600))
+	t._touch_move(0, Vector2(100 + t.STICK_RADIUS, 600))
+	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = full strength (run)")
+	t._touch_move(0, Vector2(100 + t.STICK_RADIUS * 0.4, 600))
+	var st := Input.get_action_strength("move_right")
+	_check(st > 0.3 and st < 0.5, "Touch joystick: light push = partial strength (sneak)")
+	t._touch_up(0)
+	_check(Input.get_action_strength("move_right") == 0.0, "Letting go stops movement")
+	t._touch_down(1, t.buttons["crouch"].pos)
+	t._touch_up(1)
+	_check(Input.is_action_pressed("crouch"), "Crouch button toggles on")
+	t._touch_down(1, t.buttons["crouch"].pos)
+	t._touch_up(1)
+	_check(not Input.is_action_pressed("crouch"), "...and off")
+	var y0: float = player.yaw
+	t._touch_down(2, Vector2(900, 300))
+	t._touch_move(2, Vector2(960, 300))
+	_check(player.yaw < y0, "Dragging on the right turns the camera")
+	t._touch_up(2)
 
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)

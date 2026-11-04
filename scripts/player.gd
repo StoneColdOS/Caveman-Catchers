@@ -1,5 +1,6 @@
 extends CharacterBody3D
-## The hero. Placeholder look: silver capsule with a bubble helmet and a net.
+## The hero: a grumpy old space chimp. Shadowed eyes, cigarette, smoke stuck in his
+## helmet, a robot arm and a net. Placeholder shapes until the real model.
 
 signal caught_one
 
@@ -43,6 +44,8 @@ var net_pivot: Node3D
 var camera_pivot: Node3D
 var camera: Camera3D
 var net_timer := 0.0
+var cig_tip: MeshInstance3D
+var smoke: Node3D
 var yaw := 0.0
 var pitch := -0.35
 
@@ -67,17 +70,64 @@ func _ready() -> void:
 func _build_visual() -> void:
 	visual = Node3D.new()
 	add_child(visual)
-	# Suit
-	visual.add_child(Util.mesh(Util.capsule(0.4, 1.3), Color(0.82, 0.84, 0.86), Vector3(0, 0.7, 0)))
-	# Orange chest box, on the front (+Z is forward)
-	visual.add_child(Util.mesh(Util.box(Vector3(0.36, 0.26, 0.12)), Color(0.91, 0.51, 0.23), Vector3(0, 0.95, 0.36)))
-	# Dark head inside a glass bubble
-	visual.add_child(Util.mesh(Util.sphere(0.24), Color(0.12, 0.1, 0.09), Vector3(0, 1.58, 0)))
-	var helmet := Util.mesh(Util.sphere(0.36), Color(0.8, 0.9, 0.95, 0.35), Vector3(0, 1.6, 0))
+	var suit := Color(0.79, 0.73, 0.56)
+	var boots := Color(0.56, 0.18, 0.18)
+	var metal := Color(0.55, 0.6, 0.64)
+	var fur := Color(0.36, 0.25, 0.18)
+	var face := Color(0.72, 0.58, 0.48)
+	# Suit, boots, belt, chest box with its strap (+Z is forward)
+	visual.add_child(Util.mesh(Util.capsule(0.38, 1.25), suit, Vector3(0, 0.72, 0)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.2, 0.32, 0.26)), boots, Vector3(-0.15, 0.16, 0.03)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.2, 0.32, 0.26)), boots, Vector3(0.15, 0.16, 0.03)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.8, 0.1, 0.8)), Color(0.17, 0.14, 0.12), Vector3(0, 0.78, 0)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.32, 0.24, 0.14)), Color(0.36, 0.42, 0.46), Vector3(0, 1.05, 0.36)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.08, 0.06, 0.02)), Color(0.31, 0.82, 0.55), Vector3(0, 1.05, 0.44)))
+	# Robot arm (his left side): metal segments with orange joints
+	visual.add_child(Util.mesh(Util.sphere(0.11), Color(0.91, 0.51, 0.23), Vector3(-0.44, 1.18, 0)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.12, 0.34, 0.12)), metal, Vector3(-0.47, 0.98, 0)))
+	visual.add_child(Util.mesh(Util.sphere(0.08), Color(0.3, 0.34, 0.38), Vector3(-0.48, 0.8, 0)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.1, 0.3, 0.1)), metal, Vector3(-0.48, 0.63, 0.04)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.16, 0.12, 0.14)), Color(0.4, 0.45, 0.5), Vector3(-0.48, 0.44, 0.06)))
+	# Chimp head: fur, ears, light muzzle, a band of shadow where the eyes are
+	visual.add_child(Util.mesh(Util.sphere(0.24), fur, Vector3(0, 1.6, 0)))
+	visual.add_child(Util.mesh(Util.sphere(0.08), face, Vector3(-0.24, 1.6, 0)))
+	visual.add_child(Util.mesh(Util.sphere(0.08), face, Vector3(0.24, 1.6, 0)))
+	var muzzle := Util.mesh(Util.sphere(0.15), face, Vector3(0, 1.5, 0.15))
+	muzzle.scale = Vector3(1.2, 0.85, 0.9)
+	visual.add_child(muzzle)
+	visual.add_child(Util.mesh(Util.box(Vector3(0.38, 0.09, 0.08)), Color(0.04, 0.03, 0.03), Vector3(0, 1.66, 0.19)))
+	visual.add_child(Util.mesh(Util.box(Vector3(0.4, 0.05, 0.1)), Color(0.24, 0.17, 0.12), Vector3(0, 1.72, 0.18)))
+	# Cigarette with a glowing tip
+	var cig := Util.mesh(Util.box(Vector3(0.03, 0.03, 0.2)), Color(0.95, 0.93, 0.88), Vector3(0.08, 1.47, 0.34))
+	cig.rotation.y = 0.35
+	visual.add_child(cig)
+	cig_tip = MeshInstance3D.new()
+	cig_tip.mesh = Util.sphere(0.022)
+	cig_tip.material_override = Util.mat(Color(1.0, 0.45, 0.1), true)
+	cig_tip.position = Vector3(0.115, 1.47, 0.43)
+	visual.add_child(cig_tip)
+	# Smoke trapped inside the helmet
+	smoke = Node3D.new()
+	smoke.position = Vector3(0, 1.6, 0)
+	visual.add_child(smoke)
+	for i in 7:
+		var puff := MeshInstance3D.new()
+		puff.mesh = Util.sphere(0.07)
+		puff.material_override = Util.mat(Color(0.85, 0.88, 0.9, 0.35), true)
+		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		smoke.add_child(puff)
+	# Glass bubble helmet and antenna with a red light
+	var helmet := Util.mesh(Util.sphere(0.4), Color(0.8, 0.9, 0.95, 0.22), Vector3(0, 1.6, 0))
+	helmet.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	visual.add_child(helmet)
-	# Antenna
-	visual.add_child(Util.mesh(Util.box(Vector3(0.03, 0.3, 0.03)), Color(0.6, 0.65, 0.68), Vector3(0.15, 2.05, 0)))
-	visual.add_child(Util.mesh(Util.sphere(0.06), Color(0.91, 0.51, 0.23), Vector3(0.15, 2.22, 0)))
+	var ant := Util.mesh(Util.box(Vector3(0.03, 0.32, 0.03)), metal, Vector3(0.16, 2.08, 0))
+	ant.rotation.z = -0.35
+	visual.add_child(ant)
+	var light := MeshInstance3D.new()
+	light.mesh = Util.sphere(0.06)
+	light.material_override = Util.mat(Color(1.0, 0.3, 0.2), true)
+	light.position = Vector3(0.22, 2.25, 0)
+	visual.add_child(light)
 
 	# Net: pivots around the shoulder, handle points forward
 	net_pivot = Node3D.new()
@@ -211,6 +261,8 @@ func _physics_process(delta: float) -> void:
 		target_scale = Vector3(0.9, 1.15, 0.9)
 	visual.scale = visual.scale.lerp(target_scale, 12.0 * delta)
 
+	_animate_smoke()
+
 	# Net
 	net_timer -= delta
 	if net_timer <= 0.0 and Input.is_action_just_pressed("net"):
@@ -284,6 +336,20 @@ func make_noise(radius: float, color := Color(0, 0, 0, 0)) -> void:
 		color = Color(1, 0.4, 0.3, 0.8) if radius >= RUN_NOISE else Color(1, 1, 1, 0.7)
 	Util.noise_ring(get_parent(), global_position, radius, color)
 	get_tree().call_group("gatherers", "hear_noise", global_position, radius, self)
+
+
+## Puffs swirl slowly around inside the helmet; the cigarette tip pulses.
+func _animate_smoke() -> void:
+	var t := Time.get_ticks_msec() * 0.001
+	var i := 0
+	for puff in smoke.get_children():
+		var a := t * (0.6 + i * 0.07) + i * 0.9
+		var r := 0.2 + 0.06 * sin(t * 0.7 + i)
+		puff.position = Vector3(cos(a) * r, 0.1 + 0.12 * sin(t * 0.5 + i * 1.3), sin(a) * r * 0.8)
+		puff.scale = Vector3.ONE * (0.8 + 0.4 * sin(t + i))
+		i += 1
+	var glow := 0.75 + 0.25 * sin(t * 3.0)
+	(cig_tip.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35 * glow + 0.1, 0.05)
 
 
 ## Net held upright beside him when not swinging.

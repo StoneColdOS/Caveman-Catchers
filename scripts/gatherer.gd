@@ -1,5 +1,5 @@
 extends CharacterBody3D
-## The Gatherer: the standard caveman.
+## The standard janky robot monkey (internally still called a Gatherer).
 ##   Calm:        wanders, forages with his head down (half blind), stops to look around.
 ##   Hears noise: hops, says "?", walks over to check it out, looks around.
 ##   Sees you:    stares while his "?" grows. Lose him and he checks where he last saw you.
@@ -58,6 +58,12 @@ var turn_speed := 4.0
 var player: Node3D
 var visual: Node3D
 var torso: Node3D
+var head: Node3D
+var key: Node3D
+var eye_mat: StandardMaterial3D
+var glitch_timer := 0.0
+var alerted := false
+var escaped_for_good := false
 var cone: MeshInstance3D
 var cone_mat: StandardMaterial3D
 var alert: Label3D
@@ -90,14 +96,49 @@ func _build_visual() -> void:
 	torso = Node3D.new()
 	torso.position.y = 0.2
 	visual.add_child(torso)
-	var fur := Color(0.45, 0.28, 0.16)
-	var skin := Color(0.85, 0.66, 0.5)
+	# Each robot gets a slightly different, slightly wrong look.
+	var tins := [Color(0.42, 0.6, 0.6), Color(0.68, 0.5, 0.36), Color(0.55, 0.57, 0.62), Color(0.64, 0.6, 0.42)]
+	var tin: Color = tins[randi() % tins.size()]
+	var rust := Color(0.5, 0.3, 0.18)
 	var y := -0.2
-	torso.add_child(Util.mesh(Util.capsule(0.42, 1.2), fur, Vector3(0, 0.65 + y, 0)))
-	torso.add_child(Util.mesh(Util.sphere(0.27), skin, Vector3(0, 1.45 + y, 0.05)))
-	torso.add_child(Util.mesh(Util.sphere(0.32), Color(0.2, 0.13, 0.08), Vector3(0, 1.55 + y, -0.08)))
-	torso.add_child(Util.mesh(Util.box(Vector3(0.36, 0.07, 0.06)), Color(0.15, 0.1, 0.06), Vector3(0, 1.53 + y, 0.3)))
-	torso.add_child(Util.mesh(Util.box(Vector3(0.1, 0.1, 0.12)), skin.darkened(0.15), Vector3(0, 1.43 + y, 0.33)))
+	# Boxy tin body with a rust patch, stubby legs
+	var body := Util.mesh(Util.box(Vector3(0.62, 0.66, 0.5)), tin, Vector3(0, 0.78 + y, 0))
+	body.rotation.z = randf_range(-0.08, 0.08)
+	torso.add_child(body)
+	torso.add_child(Util.mesh(Util.box(Vector3(0.2, 0.16, 0.02)), rust, Vector3(-0.14, 0.66 + y, 0.26)))
+	torso.add_child(Util.mesh(Util.box(Vector3(0.16, 0.3, 0.18)), tin.darkened(0.3), Vector3(-0.16, 0.32 + y, 0)))
+	torso.add_child(Util.mesh(Util.box(Vector3(0.16, 0.3, 0.18)), tin.darkened(0.3), Vector3(0.16, 0.32 + y, 0)))
+	# Arms: one normal, one hanging broken
+	torso.add_child(Util.mesh(Util.box(Vector3(0.1, 0.42, 0.1)), tin.darkened(0.2), Vector3(0.38, 0.72 + y, 0.02)))
+	var broken := Util.mesh(Util.box(Vector3(0.1, 0.46, 0.1)), tin.darkened(0.2), Vector3(-0.42, 0.6 + y, 0.06))
+	broken.rotation.z = -0.5
+	torso.add_child(broken)
+	# TV-screen head on a neck spring, round ears
+	torso.add_child(Util.mesh(Util.box(Vector3(0.08, 0.14, 0.08)), Color(0.3, 0.3, 0.32), Vector3(0, 1.17 + y, 0)))
+	head = Node3D.new()
+	head.position = Vector3(0, 1.42 + y, 0)
+	torso.add_child(head)
+	head.add_child(Util.mesh(Util.box(Vector3(0.56, 0.42, 0.4)), tin.lightened(0.1), Vector3.ZERO))
+	head.add_child(Util.mesh(Util.box(Vector3(0.44, 0.3, 0.02)), Color(0.05, 0.07, 0.06), Vector3(0, 0, 0.205)))
+	head.add_child(Util.mesh(Util.sphere(0.12), tin.darkened(0.15), Vector3(-0.32, 0.08, 0)))
+	head.add_child(Util.mesh(Util.sphere(0.12), tin.darkened(0.15), Vector3(0.32, 0.08, 0)))
+	var ant := Util.mesh(Util.box(Vector3(0.02, 0.22, 0.02)), Color(0.3, 0.3, 0.32), Vector3(0.12, 0.3, 0))
+	ant.rotation.z = randf_range(-0.6, 0.6)
+	head.add_child(ant)
+	# Screen eyes (unshaded so they glow); color shows his mood
+	eye_mat = Util.mat(Color(0.3, 1.0, 0.5), true)
+	for ex in [-0.1, 0.1]:
+		var eye := MeshInstance3D.new()
+		eye.mesh = Util.box(Vector3(0.08, 0.08, 0.02))
+		eye.material_override = eye_mat
+		eye.position = Vector3(ex, 0.03, 0.22)
+		head.add_child(eye)
+	# Wind-up key on his back
+	key = Node3D.new()
+	key.position = Vector3(0, 0.82 + y, -0.3)
+	torso.add_child(key)
+	key.add_child(Util.mesh(Util.box(Vector3(0.04, 0.04, 0.14)), Color(0.75, 0.62, 0.3), Vector3(0, 0, -0.07)))
+	key.add_child(Util.mesh(Util.box(Vector3(0.3, 0.14, 0.03)), Color(0.85, 0.7, 0.3), Vector3(0, 0, -0.15)))
 
 	cone = MeshInstance3D.new()
 	cone.mesh = _cone_mesh(SIGHT_RANGE, deg_to_rad(FOV_DEG))
@@ -163,7 +204,7 @@ func _do_wander(delta: float, sees: bool) -> Vector3:
 		turn_speed = 3.0
 		if scan and turn_timer <= 0.0:
 			heading += randf_range(-1.8, 1.8)
-			turn_timer = randf_range(0.8, 1.6)
+			turn_timer = randf_range(0.8, 1.6) * (0.5 if alerted else 1.0)
 		if wait_timer <= 0.0:
 			_pick_wander_target()
 		return Vector3.ZERO
@@ -186,6 +227,8 @@ func _do_forage(delta: float, sees: bool) -> void:
 	if sees:
 		_become_suspicious(true)
 		return
+	if alerted:
+		state_timer = 0.0  # no foraging during an alert
 	state_timer -= delta
 	if state_timer <= 0.0:
 		state = State.WANDER
@@ -195,7 +238,7 @@ func _do_forage(delta: float, sees: bool) -> void:
 
 func _do_suspicious(delta: float, sees: bool) -> void:
 	if sees:
-		awareness += delta / NOTICE_TIME * _closeness_boost()
+		awareness += delta / NOTICE_TIME * _closeness_boost() * (1.8 if alerted else 1.0)
 		last_seen = player.global_position
 		_face(last_seen, 3.0)
 		if awareness >= 1.0:
@@ -242,7 +285,7 @@ func _do_flee(delta: float, sees: bool) -> Vector3:
 	warn_timer -= delta
 	if warn_timer <= 0.0:
 		warn_timer = 0.0
-		warned_tribe.emit()
+		_blast_off()
 		return Vector3.ZERO
 	# Panic hops while running.
 	hop_timer -= delta
@@ -252,6 +295,28 @@ func _do_flee(delta: float, sees: bool) -> Vector3:
 	var away := _flat(global_position - player.global_position).normalized()
 	_face(global_position + away, 10.0)
 	return away * FLEE_SPEED
+
+
+## Got away: his janky rocket kicks in and he's gone for good. Everyone else goes on alert.
+func _blast_off() -> void:
+	state = State.CAUGHT  # out of play
+	escaped_for_good = true
+	collision_layer = 0
+	collision_mask = 0
+	alert.text = ""
+	cone.visible = false
+	Util.noise_ring(get_parent(), global_position, 30.0, Color(1, 0.2, 0.15, 0.9))
+	warned_tribe.emit()
+	_spark()
+	var tw := create_tween()
+	tw.tween_property(visual, "position", visual.position + Vector3(randf_range(-2, 2), 18, randf_range(-2, 2)), 1.2).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+	tw.parallel().tween_property(visual, "rotation:z", randf_range(-4, 4), 1.2)
+	tw.tween_callback(queue_free)
+
+
+## Area alert: sharper eyes, faster to spot you, constantly looking around.
+func set_alert(on: bool) -> void:
+	alerted = on
 
 
 func _do_drowsy(delta: float) -> Vector3:
@@ -358,6 +423,8 @@ func _sight_range() -> float:
 	var sight := SIGHT_RANGE_CROUCH if player.crouching else SIGHT_RANGE
 	if state == State.FORAGE:
 		sight *= FORAGE_SIGHT
+	if alerted:
+		sight *= 1.35
 	return sight
 
 
@@ -431,6 +498,7 @@ static func _flat(v: Vector3) -> Vector3:
 
 func _update_indicators(delta: float) -> void:
 	var foraging := state == State.FORAGE
+	_jank(delta)
 	match state:
 		State.WANDER, State.FORAGE:
 			cone_mat.albedo_color = CONE_CALM
@@ -466,6 +534,42 @@ func _update_indicators(delta: float) -> void:
 	var reach := _sight_range() / SIGHT_RANGE
 	cone.scale = cone.scale.lerp(Vector3(reach, 1, reach), clamp(8.0 * delta, 0.0, 1.0))
 	cone.rotation.y = 0.0
+
+
+## Broken-robot behavior: wind-up key spins, head twitches, sparks fly, eyes match mood.
+func _jank(delta: float) -> void:
+	var spin := 8.0 if state == State.FLEE else (0.0 if state == State.SLEEP else 2.0)
+	key.rotation.z += spin * delta
+	var mood := Color(0.3, 1.0, 0.5)
+	match state:
+		State.SUSPICIOUS, State.INVESTIGATE:
+			mood = Color(1.0, 0.85, 0.1)
+		State.FLEE:
+			mood = Color(1.0, 0.15, 0.1)
+		State.DROWSY:
+			mood = Color(1.0, 0.5, 0.1) if randf() < 0.5 else Color(0.2, 0.2, 0.2)
+		State.SLEEP:
+			mood = Color(0.08, 0.1, 0.12)
+	eye_mat.albedo_color = mood
+	glitch_timer -= delta
+	if glitch_timer <= 0.0 and state != State.SLEEP:
+		glitch_timer = randf_range(1.5, 4.0)
+		head.rotation = Vector3(randf_range(-0.25, 0.25), randf_range(-0.4, 0.4), randf_range(-0.3, 0.3))
+		if randf() < 0.5:
+			_spark()
+	head.rotation = head.rotation.lerp(Vector3.ZERO, clamp(3.0 * delta, 0.0, 1.0))
+
+
+func _spark() -> void:
+	for i in 3:
+		var sp := MeshInstance3D.new()
+		sp.mesh = Util.box(Vector3(0.05, 0.05, 0.05))
+		sp.material_override = Util.mat(Color(1.0, 0.9, 0.4), true)
+		head.add_child(sp)
+		sp.position = Vector3(randf_range(-0.3, 0.3), 0.2, randf_range(-0.2, 0.2))
+		var tw := sp.create_tween()
+		tw.tween_property(sp, "position", sp.position + Vector3(randf_range(-0.4, 0.4), randf_range(0.2, 0.5), randf_range(-0.4, 0.4)), 0.3)
+		tw.tween_callback(sp.queue_free)
 
 
 ## A flat fan shape pointing along +Z.

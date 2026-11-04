@@ -1,0 +1,61 @@
+name: Build web version
+
+# Every push to main builds the web version and publishes it to GitHub Pages.
+# Play it on a phone: https://stonecoldos.github.io/caveman-catchers/
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  GODOT_VERSION: 4.7.1
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Godot and web export templates
+        run: |
+          V=$GODOT_VERSION
+          wget -q https://github.com/godotengine/godot/releases/download/$V-stable/Godot_v$V-stable_linux.x86_64.zip
+          unzip -q Godot_v$V-stable_linux.x86_64.zip
+          mv Godot_v$V-stable_linux.x86_64 /usr/local/bin/godot
+          wget -q https://github.com/godotengine/godot/releases/download/$V-stable/Godot_v$V-stable_export_templates.tpz
+          D=~/.local/share/godot/export_templates/$V.stable
+          mkdir -p $D
+          unzip -q Godot_v$V-stable_export_templates.tpz 'templates/web_nothreads_*' 'templates/version.txt'
+          mv templates/* $D/
+
+      - name: Export web build
+        run: |
+          mkdir -p export/web
+          godot --headless --import || true
+          godot --headless --export-release "Web" export/web/index.html
+          ls -la export/web
+          test -s export/web/index.wasm
+
+      - uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: export/web
+
+      - id: deploy
+        uses: actions/deploy-pages@v4

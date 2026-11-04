@@ -6,6 +6,7 @@ const Util := preload("res://scripts/util.gd")
 const Controls := preload("res://scripts/controls.gd")
 const PlayerScript := preload("res://scripts/player.gd")
 const GathererScript := preload("res://scripts/gatherer.gd")
+const TouchScript := preload("res://scripts/touch_controls.gd")
 
 const ARENA := 50.0
 const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
@@ -18,6 +19,9 @@ var darts_label: Label
 var alert_label: Label
 var crosshair: Control
 var game_over := false
+var hint_label: Label
+var escaped := 0
+var area_alert := 0.0
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -32,6 +36,8 @@ func _ready() -> void:
 	_spawn_gatherers()
 	_build_hud()
 	_build_debug()
+	if use_touch():
+		_build_touch()
 
 
 func _process(delta: float) -> void:
@@ -52,6 +58,24 @@ func _process(delta: float) -> void:
 		mode_label.modulate = Color(1, 0.45, 0.35) if loud else (Color(0.6, 1, 0.7) if silent else Color.WHITE)
 
 
+## Phones and tablets get on-screen controls (?touch in the web address forces them on).
+static func use_touch() -> bool:
+	if OS.has_feature("web") and JavaScriptBridge.eval("location.search.includes('touch')", true):
+		return true
+	return DisplayServer.is_touchscreen_available()
+
+
+func _build_touch() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 5
+	add_child(layer)
+	var t := Control.new()
+	t.set_script(TouchScript)
+	t.player = player
+	layer.add_child(t)
+	hint_label.visible = false
+
+
 # --- Controller debug readout (top right). Remove once controls are solid on the Thor.
 
 var debug_label: Label
@@ -60,6 +84,7 @@ var last_raw := "nothing yet"
 
 func _build_debug() -> void:
 	var layer := CanvasLayer.new()
+	layer.visible = not OS.has_feature("web") and not use_touch()
 	layer.layer = 10
 	add_child(layer)
 	debug_label = Label.new()
@@ -266,8 +291,9 @@ func _build_hud() -> void:
 			bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
 			crosshair.add_child(bar)
 
-	var hint := Label.new()
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Camera: R-stick  Restart: Start"
+	hint_label = Label.new()
+	var hint := hint_label
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1  Net: R1  Aim: L2  Fire: R2  Look: R-stick  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44
@@ -290,33 +316,37 @@ func _build_hud() -> void:
 	_update_hud()
 
 
-## Shows the countdown for whoever is running to warn the tribe.
+const ALERT_TIME := 30.0
+
+## Top banner: countdown for a robot running to escape, or the area alert timer.
 func _update_alert() -> void:
-	if game_over or alert_label == null:
+	if alert_label == null:
 		return
+	if area_alert > 0.0:
+		area_alert -= get_process_delta_time()
+		if area_alert <= 0.0:
+			get_tree().call_group("gatherers", "set_alert", false)
 	var shortest := INF
 	for g in get_tree().get_nodes_in_group("gatherers"):
 		if g.is_warning():
 			shortest = min(shortest, g.warn_timer)
-	if shortest == INF:
-		alert_label.text = ""
-		return
-	alert_label.text = "ALERT!  Stop him: %.1f" % shortest
 	var flash := 0.6 + 0.4 * sin(Time.get_ticks_msec() * 0.02)
-	alert_label.modulate = Color(1, 0.25 * flash, 0.2 * flash)
+	if shortest != INF:
+		alert_label.text = "SPOTTED!  Stop him: %.1f" % shortest
+		alert_label.modulate = Color(1, 0.25 * flash, 0.2 * flash)
+	elif area_alert > 0.0:
+		alert_label.text = "AREA ALERT  %d" % ceil(area_alert)
+		alert_label.modulate = Color(1, 0.55 * flash + 0.2, 0.2)
+	else:
+		alert_label.text = ""
 
 
-## A caveman got away and warned the tribe.
+## A robot got away. He's gone for good and every other robot goes on alert.
 func _on_warned() -> void:
-	if game_over:
-		return
-	game_over = true
-	player.set_physics_process(false)
-	for g in get_tree().get_nodes_in_group("gatherers"):
-		g.set_physics_process(false)
-	alert_label.text = ""
-	message_label.modulate = Color(1, 0.4, 0.35)
-	message_label.text = "The tribe has been warned!\nGAME OVER\n\nPress Start to try again"
+	escaped += 1
+	area_alert = ALERT_TIME
+	get_tree().call_group("gatherers", "set_alert", true)
+	_update_hud()
 
 
 func _on_caught() -> void:
@@ -325,8 +355,15 @@ func _on_caught() -> void:
 
 
 func _update_hud() -> void:
-	count_label.text = "Caught: %d / %d" % [caught, GATHERER_SPOTS.size()]
-	if caught >= GATHERER_SPOTS.size():
-		message_label.text = "All cavemen caught!\nPress Start to play again"
+	var total := GATHERER_SPOTS.size()
+	count_label.text = "Caught: %d / %d" % [caught, total]
+	if escaped > 0:
+		count_label.text += "   Escaped: %d" % escaped
+	if caught + escaped >= total:
+		game_over = true
+		if caught == total:
+			message_label.text = "Perfect! Every robot monkey caught.\nPress Start to play again"
+		else:
+			message_label.text = "Round over: %d of %d caught.\nPress Start to try for all %d" % [caught, total, total]
 	else:
 		message_label.text = ""
