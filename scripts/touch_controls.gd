@@ -35,6 +35,7 @@ func _layout() -> void:
 		"jump":   {"pos": Vector2(right, bottom), "radius": r, "label": "JUMP", "action": "jump", "toggle": false},
 		"net":    {"pos": Vector2(right - 115, bottom + 10), "radius": r, "label": "GRAB", "action": "net", "toggle": false},
 		"crouch": {"pos": Vector2(right - 225, bottom + 25), "radius": 38.0, "label": "CROUCH", "action": "crouch", "toggle": true},
+		"light":  {"pos": Vector2(right - 20, bottom - 115), "radius": 38.0, "label": "LIGHT", "action": "light", "toggle": false},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 		"style": {"pos": Vector2(s.x - 60, 225), "radius": 30.0, "label": "STYLE", "action": "style", "toggle": false},
 	}

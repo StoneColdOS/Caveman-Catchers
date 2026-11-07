@@ -7,6 +7,7 @@ extends RefCounted
 ##   Jump       A (bottom)  / Space
 ##   Crouch     L1 or L2    / Shift or C
 ##   Grab       R1 or R2    / J or E   (stuff a robot in the satchel)
+##   Flashlight Y (top)     / F   (on: you can see, but robots spot you from farther)
 ##   Art style  Select      / T   (rubber hose on/off)
 ##   Restart    Start       / Enter
 
@@ -48,6 +49,10 @@ static func setup() -> void:
 
 	_action("walk")
 	_key("walk", KEY_CTRL)
+
+	_action("light")
+	_key("light", KEY_F)
+	_button("light", JOY_BUTTON_Y)
 
 	_action("style")
 	_key("style", KEY_T)

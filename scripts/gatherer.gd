@@ -432,6 +432,8 @@ func _sight_range() -> float:
 	var sight := SIGHT_RANGE_CROUCH if player.crouching else SIGHT_RANGE
 	if state == State.FORAGE:
 		sight *= FORAGE_SIGHT
+	if not player.is_lit():
+		sight *= player.DARK_SIGHT  # hard to see you in the dark
 	return sight
 
 

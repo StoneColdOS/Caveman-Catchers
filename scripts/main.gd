@@ -1,6 +1,6 @@
 extends Node3D
-## Builds the grey-box jungle clearing, the player, the cavemen and the HUD.
-## Everything is placeholder shapes on purpose: we're testing fun, not art.
+## Builds the night-time snowy woods (PS1 horror look), the player, the robots and the HUD.
+## Placeholder shapes on purpose: we're testing fun, not final art.
 
 const Util := preload("res://scripts/util.gd")
 const Controls := preload("res://scripts/controls.gd")
@@ -9,6 +9,8 @@ const GathererScript := preload("res://scripts/gatherer.gd")
 const TouchScript := preload("res://scripts/touch_controls.gd")
 
 const ARENA := 50.0
+const LAMP_SPOTS := [Vector3(-7, 0, -5), Vector3(9, 0, 4), Vector3(-4, 0, 11), Vector3(14, 0, -14)]
+const LAMP_RADIUS := 5.0
 const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
 
 var player: CharacterBody3D
@@ -19,6 +21,8 @@ var alert_label: Label
 var game_over := false
 var hint_label: Label
 var hold_bar: ProgressBar
+var snow_emitter: CPUParticles3D
+var ps1: ColorRect
 var message_label: Label
 var rng := RandomNumberGenerator.new()
 
@@ -32,6 +36,7 @@ func _ready() -> void:
 	_build_cover()
 	_spawn_player()
 	_spawn_gatherers()
+	_build_ps1()
 	_build_hud()
 	_build_debug()
 	if use_touch():
@@ -45,11 +50,35 @@ func _process(delta: float) -> void:
 	_update_alert()
 	if Input.is_action_just_pressed("style"):
 		Util.set_rubber(get_tree(), not Util.rubber)
+	if snow_emitter and player:
+		snow_emitter.global_position = player.global_position + Vector3(0, 9, 0)
 	if player and mode_label:
-		mode_label.text = player.move_mode
+		mode_label.text = player.move_mode + ("   |   LIT UP" if player.is_lit() else "   |   in the dark")
 		var loud: bool = player.move_mode.begins_with("Running")
 		var silent: bool = player.move_mode.contains("silent")
 		mode_label.modulate = Color(1, 0.45, 0.35) if loud else (Color(0.6, 1, 0.7) if silent else Color.WHITE)
+
+
+## PS1-style screen: low resolution with chunky pixels and a little color dithering.
+func _build_ps1() -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 0
+	add_child(layer)
+	ps1 = ColorRect.new()
+	ps1.set_anchors_preset(Control.PRESET_FULL_RECT)
+	ps1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var sm := ShaderMaterial.new()
+	sm.shader = load("res://shaders/ps1.gdshader")
+	ps1.material = sm
+	layer.add_child(ps1)
+
+
+## Is this spot inside a lamp's pool of light?
+func in_lamp_light(pos: Vector3) -> bool:
+	for l in LAMP_SPOTS:
+		if Vector2(pos.x - l.x, pos.z - l.z).length() < LAMP_RADIUS:
+			return true
+	return false
 
 
 ## Phones and tablets get on-screen controls (?touch in the web address forces them on).
@@ -127,84 +156,147 @@ func _update_debug() -> void:
 
 
 func _build_environment() -> void:
+	# Night: near-black sky, cold dim ambient, thick dark fog that swallows the distance
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.45, 0.62, 0.55)
+	env.background_color = Color(0.02, 0.025, 0.04)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.55, 0.65, 0.55)
-	env.ambient_light_energy = 0.45
+	env.ambient_light_color = Color(0.3, 0.36, 0.5)
+	env.ambient_light_energy = 0.1
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.45, 0.62, 0.55)
-	env.fog_density = 0.01
+	env.fog_light_color = Color(0.03, 0.035, 0.05)
+	env.fog_density = 0.075
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
-	var sun := DirectionalLight3D.new()
-	sun.rotation_degrees = Vector3(-50, 35, 0)
-	sun.light_energy = 1.3
-	sun.light_color = Color(1.0, 0.96, 0.88)
-	sun.shadow_enabled = true
-	add_child(sun)
-	# Cool back light from the other side: rims the edges so characters read as round
-	var back := DirectionalLight3D.new()
-	back.rotation_degrees = Vector3(-25, 215, 0)
-	back.light_energy = 0.55
-	back.light_color = Color(0.65, 0.78, 1.0)
-	add_child(back)
+	# Weak blue moonlight
+	var moon := DirectionalLight3D.new()
+	moon.rotation_degrees = Vector3(-55, 30, 0)
+	moon.light_energy = 0.14
+	moon.light_color = Color(0.55, 0.65, 0.95)
+	moon.shadow_enabled = true
+	add_child(moon)
 
 
 func _build_ground() -> void:
-	_static_box(Vector3(ARENA + 20, 1, ARENA + 20), Vector3(0, -0.5, 0), Color(0.28, 0.45, 0.22))
-	# Thick jungle walls around the edge
+	_static_box(Vector3(ARENA + 20, 1, ARENA + 20), Vector3(0, -0.5, 0), Color(0.8, 0.84, 0.9))  # snow
+	# Dense dark pines all around the edge (the fog hides how fake it is)
 	var h := ARENA / 2.0
-	var wall := Color(0.12, 0.25, 0.12)
-	_static_box(Vector3(ARENA + 4, 6, 2), Vector3(0, 3, -h - 1), wall)
-	_static_box(Vector3(ARENA + 4, 6, 2), Vector3(0, 3, h + 1), wall)
-	_static_box(Vector3(2, 6, ARENA), Vector3(-h - 1, 3, 0), wall)
-	_static_box(Vector3(2, 6, ARENA), Vector3(h + 1, 3, 0), wall)
+	var wall := Color(0.04, 0.07, 0.05)
+	_static_box(Vector3(ARENA + 4, 8, 2), Vector3(0, 4, -h - 1), wall)
+	_static_box(Vector3(ARENA + 4, 8, 2), Vector3(0, 4, h + 1), wall)
+	_static_box(Vector3(2, 8, ARENA), Vector3(-h - 1, 4, 0), wall)
+	_static_box(Vector3(2, 8, ARENA), Vector3(h + 1, 4, 0), wall)
 
 
-## Rocks and trees: things to sneak behind. They block caveman eyesight.
+## Rocks, pines and lamp posts. Rocks and trees block robot eyesight; lamps light you up.
 func _build_cover() -> void:
 	for i in 14:
 		var p := _random_spot()
 		var size := Vector3(rng.randf_range(1.5, 4.0), rng.randf_range(1.2, 2.8), rng.randf_range(1.5, 4.0))
-		var rock := _static_box(size, p + Vector3(0, size.y / 2.0, 0), Color(0.42, 0.4, 0.36))
+		var rock := _static_box(size, p + Vector3(0, size.y / 2.0, 0), Color(0.3, 0.3, 0.32))
 		rock.rotation.y = rng.randf() * TAU
-	for i in 18:
-		var p := _random_spot()
-		_tree(p)
+		rock.add_child(Util.mesh(Util.box(Vector3(size.x * 0.92, 0.12, size.z * 0.92)), Color(0.85, 0.88, 0.93), Vector3(0, size.y / 2.0 + 0.05, 0)))  # snow cap
+	for i in 22:
+		_pine(_random_spot())
+	for spot in LAMP_SPOTS:
+		_lamp(spot)
+	_snowfall()
 
 
-func _tree(p: Vector3) -> void:
+func _pine(p: Vector3) -> void:
 	var body := StaticBody3D.new()
 	body.collision_layer = Util.LAYER_WORLD
 	body.position = p
 	add_child(body)
-	var trunk_h := rng.randf_range(4.0, 6.5)
+	var height := rng.randf_range(5.0, 8.0)
 	var shape := CollisionShape3D.new()
 	var cyl_shape := CylinderShape3D.new()
-	cyl_shape.radius = 0.45
-	cyl_shape.height = trunk_h
+	cyl_shape.radius = 0.4
+	cyl_shape.height = height
 	shape.shape = cyl_shape
-	shape.position.y = trunk_h / 2.0
+	shape.position.y = height / 2.0
 	body.add_child(shape)
 	var trunk := CylinderMesh.new()
-	trunk.top_radius = 0.35
-	trunk.bottom_radius = 0.5
-	trunk.height = trunk_h
+	trunk.top_radius = 0.18
+	trunk.bottom_radius = 0.3
+	trunk.height = height * 0.35
 	trunk.radial_segments = 6
-	body.add_child(Util.mesh(trunk, Color(0.35, 0.24, 0.15), Vector3(0, trunk_h / 2.0, 0)))
-	var canopy := Util.mesh(Util.sphere(rng.randf_range(1.6, 2.4)), Color(0.18, 0.42, 0.18), Vector3(0, trunk_h + 0.6, 0))
-	body.add_child(canopy)
+	body.add_child(Util.mesh(trunk, Color(0.2, 0.14, 0.1), Vector3(0, height * 0.175, 0)))
+	# Three stacked tiers of branches, each dusted with snow
+	for tier in 3:
+		var r := 1.8 - tier * 0.5
+		var tier_h := height * 0.38
+		var y := height * 0.25 + tier * height * 0.22
+		var cone := CylinderMesh.new()
+		cone.top_radius = 0.0
+		cone.bottom_radius = r
+		cone.height = tier_h
+		cone.radial_segments = 7
+		body.add_child(Util.mesh(cone, Color(0.07, 0.15, 0.1), Vector3(0, y + tier_h / 2.0, 0)))
+		var snow := CylinderMesh.new()
+		snow.top_radius = 0.0
+		snow.bottom_radius = r * 0.55
+		snow.height = tier_h * 0.45
+		snow.radial_segments = 7
+		body.add_child(Util.mesh(snow, Color(0.82, 0.86, 0.92), Vector3(0, y + tier_h * 0.8, 0)))
+
+
+## A lamp post with a warm pool of light. Standing in it lets robots see you from far away.
+func _lamp(p: Vector3) -> void:
+	var post := _static_box(Vector3(0.15, 3.2, 0.15), p + Vector3(0, 1.6, 0), Color(0.15, 0.15, 0.16))
+	post.add_to_group("lamps")
+	var head := MeshInstance3D.new()
+	head.mesh = Util.box(Vector3(0.4, 0.3, 0.4))
+	head.material_override = Util.mat(Color(1.0, 0.82, 0.5), true)
+	head.position = Vector3(0, 1.7, 0)
+	post.add_child(head)
+	var light := OmniLight3D.new()
+	light.position = Vector3(0, 1.5, 0)
+	light.light_color = Color(1.0, 0.75, 0.45)
+	light.light_energy = 3.5
+	light.omni_range = LAMP_RADIUS + 2.5
+	light.omni_attenuation = 1.2
+	post.add_child(light)
+
+
+## Snow falling around the player.
+func _snowfall() -> void:
+	var snow := CPUParticles3D.new()
+	snow.amount = 450
+	snow.lifetime = 6.0
+	snow.preprocess = 6.0
+	snow.local_coords = false
+	snow.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
+	snow.emission_box_extents = Vector3(14, 0.5, 14)
+	snow.direction = Vector3(0.15, -1, 0)
+	snow.spread = 12.0
+	snow.gravity = Vector3(0, -0.6, 0)
+	snow.initial_velocity_min = 0.8
+	snow.initial_velocity_max = 1.4
+	var flake := QuadMesh.new()
+	flake.size = Vector2(0.05, 0.05)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
+	m.albedo_color = Color(0.9, 0.93, 1.0)
+	flake.material = m
+	snow.mesh = flake
+	snow.position = Vector3(0, 9, 0)
+	snow_emitter = snow
+	add_child(snow)
 
 
 func _random_spot() -> Vector3:
 	# Keep the middle open near the player start, and away from walls.
 	while true:
 		var p := Vector3(rng.randf_range(-21, 21), 0, rng.randf_range(-21, 21))
-		if p.length() > 5.0:
+		var clear := p.length() > 5.0
+		for l in LAMP_SPOTS:
+			if p.distance_to(l) < 3.0:
+				clear = false
+		if clear:
 			return p
 	return Vector3.ZERO
 
@@ -285,7 +377,7 @@ func _build_hud() -> void:
 
 	hint_label = Label.new()
 	var hint := hint_label
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1/L2  Grab: R1/R2  Look: R-stick  Style: Select  Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1/L2  Grab: R1/R2  Light: Y  Look: R-stick  Style: Select  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44

@@ -12,7 +12,8 @@ const CROUCH_SPEED := 1.6     # creeping: silent
 const SNEAK_SPEED := 2.4      # light tilt: quiet footsteps
 const RUN_SPEED := 5.0        # full tilt: loud footsteps
 const SNEAK_TILT := 0.7       # stick tilt below this = sneaking
-const ACCEL := 30.0
+const ACCEL := 14.0           # heavier, more grounded starts and stops
+const DARK_SIGHT := 0.5       # robots see half as far when you're in the dark
 const GRAVITY := 20.0
 const JUMP_VELOCITY := 7.0
 const LOOK_SPEED := 2.6
@@ -67,7 +68,9 @@ var walk_phase := 0.0
 var cig_tip: MeshInstance3D
 var smoke: Node3D
 var yaw := 0.0
-var pitch := -0.35
+var pitch := -0.25
+var flashlight: SpotLight3D
+var flashlight_on := true
 
 
 func _ready() -> void:
@@ -139,6 +142,23 @@ func _build_visual() -> void:
 	var cross := Util.mesh(Util.box(Vector3(0.04, 0.62, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0.0, 1.22, 0.24))
 	cross.rotation.z = -0.6
 	body_root.add_child(cross)
+	# Flashlight clipped to his chest strap, pointing where he faces
+	flashlight = SpotLight3D.new()
+	flashlight.position = Vector3(0.12, 1.36, 0.28)
+	flashlight.rotation = Vector3(-0.12, PI, 0)
+	flashlight.spot_range = 18.0
+	flashlight.spot_angle = 26.0
+	flashlight.spot_attenuation = 0.9
+	flashlight.light_energy = 8.0
+	flashlight.light_color = Color(1.0, 0.95, 0.85)
+	flashlight.shadow_enabled = true
+	body_root.add_child(flashlight)
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.08, 0.08, 0.12)), Color(0.12, 0.12, 0.12), Vector3(0.12, 1.36, 0.25)))
+	var lens := MeshInstance3D.new()
+	lens.mesh = Util.box(Vector3(0.06, 0.06, 0.02))
+	lens.material_override = Util.mat(Color(1.0, 0.97, 0.85), true)
+	lens.position = Vector3(0.12, 1.36, 0.315)
+	body_root.add_child(lens)
 	# Robot arm's shoulder joint (his left)
 	body_root.add_child(Util.mesh(Util.sphere(0.09), Color(0.91, 0.51, 0.23), Vector3(0.3, 1.38, 0)))
 
@@ -378,16 +398,17 @@ func _animate(delta: float, on_floor: bool) -> void:
 
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
-	camera_pivot.position.y = 1.6
+	camera_pivot.position.y = 1.65
 	add_child(camera_pivot)
 	arm = SpringArm3D.new()
-	arm.spring_length = 6.0
+	arm.spring_length = 3.4      # close, over the shoulder
+	arm.position = Vector3(0.55, 0.15, 0)
 	arm.collision_mask = Util.LAYER_WORLD
 	arm.margin = 0.3
 	arm.add_excluded_object(get_rid())
 	camera_pivot.add_child(arm)
 	camera = Camera3D.new()
-	camera.fov = 70.0
+	camera.fov = 62.0
 	arm.add_child(camera)
 	camera.make_current()
 
@@ -466,6 +487,10 @@ func _physics_process(delta: float) -> void:
 	_animate(delta, on_floor)
 
 	_animate_smoke()
+
+	# Flashlight
+	if Input.is_action_just_pressed("light"):
+		toggle_flashlight()
 
 	# Net
 	net_timer -= delta
@@ -557,6 +582,20 @@ func _stuffed() -> void:
 	tw.tween_property(satchel, "rotation:z", 0.0, 0.08)
 
 
+func toggle_flashlight() -> void:
+	flashlight_on = not flashlight_on
+	flashlight.visible = flashlight_on
+	make_noise(1.5, Color(0.9, 0.9, 0.8, 0.5))  # click
+
+
+## Can robots see you from far away? True with the flashlight on or standing in lamplight.
+func is_lit() -> bool:
+	if flashlight_on:
+		return true
+	var main := get_parent()
+	return main != null and main.has_method("in_lamp_light") and main.in_lamp_light(global_position)
+
+
 ## Sends a sound out. Any caveman inside the radius hears it.
 func make_noise(radius: float, color := Color(0, 0, 0, 0)) -> void:
 	if color.a == 0.0:
@@ -582,7 +621,7 @@ func _animate_smoke() -> void:
 		var o: Vector3 = smoke_origin[i] + smoke_away[i] * life * 0.45  # drift away from his face
 		# Puffs stay where they were puffed, so moving leaves a trail behind him
 		puff.global_position = o + Vector3(sin(t * 1.6 + i) * 0.14 * life, life * 1.3, cos(t * 1.3 + i) * 0.12 * life)
-		puff.scale = Vector3.ONE * (0.6 + life * 2.6)
-		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.62 * (1.0 - life * life)
+		puff.scale = Vector3.ONE * (0.5 + life * 1.5)
+		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.45 * (1.0 - life * life)
 	var glow := 0.75 + 0.25 * sin(t * 3.0)
 	(cig_tip.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35 * glow + 0.1, 0.05)

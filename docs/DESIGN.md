@@ -20,13 +20,14 @@ Tagline: *Catch those damn dirty humans.*
 ## Locked decisions
 
 - **Name:** Caveman Catchers (working title)
-- **Perspective and look:** 3D, faceted low-poly (flat shading, every face its own plane) with chunky mottled pixel textures, like the user's Blender reference ([in game](concept/style-pixel-lowpoly.png)). Rubber hose animation on top
+- **Perspective and look:** PS1 survival-horror, inspired by a fan "Resident Evil as a PS1 game" video the user shared. Night, snowy woods, thick dark fog, falling snow, warm lamp posts, flashlight. Low-resolution screen with chunky pixels and color dithering (no sepia or film grain). Faceted low-poly shapes with mottled pixel textures. Close over-the-shoulder camera, heavier grounded movement. Rubber hose mode still exists behind the STYLE button but is off
 - **Hero:** a lanky old space chimp, from the user's sketch ([sketch](concept/hero-sketch.png), [in game](concept/hero-ingame.png)). No helmet. Hair tuft, brow ridge, muzzle, droopy half-lidded eye and an X eye, a chewed left ear, a cigarette floating at his mouth (cartoon style, doesn't bob with his head) with thick smoke that trails behind him, V harness, belt with three pouches, satchel on his back, wristbands, knee pads, banded boots with soles, chest and shoulder pads, robot arm on his left, grabbing with his right (chimp) hand. Long noodle limbs (rubber hose). Worn grey suit with olive gear. Gruff vet who hates the robots that replaced him
 - **Targets:** escaped cavemen and cavewomen
 - **Setting for first area:** jungle planet
 - **Catch flow:** spot target, sneak up close, grab them into a headlock, tap GRAB to unwind the key on their back until they power down, then stuff them in his satchel. 4 taps if they never saw you, about 9 if they did; stop tapping for a second and they wriggle free and run. You can't move while holding one, each crank clanks (quiet noise), and other robots can still spot you. Considered an MGS-style balloon extraction and skipped it: too recognizably MGS, and the satchel already does that job. No net (the user disliked the big net, and it was Ape Escape's signature anyway). The satchel bulges and rattles as it fills
 - **Tools:**
   - **Net:** silent, but you have to sneak in close
+- **Light and dark:** flashlight on (Y / F / LIGHT) lets you see but robots spot you from full range; in the dark they see half as far. Standing in a lamp's pool of light lights you up even with the flashlight off
 - **Detection:** sight (vision cones) and sound (footsteps, landings, yells). Sounds make cavemen investigate; only sight can fully spot you
 - **Movement:** MGS-style. Light stick tilt sneaks quietly, full tilt runs loudly, crouch creeps silently. Jump, but landings are loud
 - **When spotted:** cavemen flee, fight back, or raise an alarm

@@ -126,6 +126,21 @@ func _run() -> void:
 	_check(not g0.is_fleeing() and g0.state == g0.State.INVESTIGATE, "Lose sight of him and he calms down to searching")
 	_check(not main.game_over, "No game over for getting spotted")
 
+	# --- 6b. Light and dark.
+	var gl = gs[4] if is_instance_valid(gs[4]) else gs[0]
+	var lit_range: float = gl._sight_range()
+	player.toggle_flashlight()
+	_check(not player.flashlight_on, "Flashlight toggles off")
+	player.global_position = Vector3(0, 0.1, 0)
+	await _frames(2)
+	_check(not player.is_lit(), "In the dark with the light off: not lit")
+	_check(gl._sight_range() < lit_range * 0.6, "Robots see you half as far in the dark")
+	player.global_position = main.LAMP_SPOTS[0] + Vector3(1, 0.1, 0)
+	await _frames(2)
+	_check(player.is_lit(), "Standing in lamplight lights you up even with the flashlight off")
+	player.toggle_flashlight()
+	_check(player.flashlight_on and player.is_lit(), "Flashlight back on")
+
 	# --- 7. Touch controls drive the same actions.
 	var TouchScript := load("res://scripts/touch_controls.gd")
 	var t: Control = TouchScript.new()

@@ -54,7 +54,7 @@ static func beat() -> float:
 
 ## How exaggerated animation should be right now.
 static func amp() -> float:
-	return 1.0 if rubber else 0.35
+	return 1.0 if rubber else 0.2   # plain: grounded, barely any bounce
 
 
 static func set_rubber(tree: SceneTree, on: bool) -> void:

@@ -26,6 +26,16 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] New hero from the user's sketch: lanky chimp with helmet, droopy eye + X eye, chewed ear, cigarette through the helmet, harness, pouches, satchel, knee pads, robot arm
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
+
+## Prototype 6: PS1 horror direction (current)
+
+- [x] Night in snowy woods: dark fog, falling snow, snowy pines and rocks, warm lamp posts with pools of light, weak moonlight
+- [x] Flashlight with real stealth tradeoff: on = you can see, robots spot you from full range; off = half range. Lamplight lights you up
+- [x] PS1 screen: low resolution, chunky pixels, ordered color dithering
+- [x] Heavier movement (slower acceleration, barely any bounce) and a close over-the-shoulder camera
+- [ ] Characters redesigned for the horror look (in discussion)
+- [ ] Maybe: fixed cinematic camera angles in places, like classic Resident Evil
+
 ---
 
 ## Prototype 1: one Gatherer (current)
