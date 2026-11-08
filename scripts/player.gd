@@ -1,7 +1,6 @@
 extends CharacterBody3D
-## The hero: a lanky old space chimp from the user's sketch. Droopy eye, X eye, chewed
-## ear, a cigarette floating at his mouth, harness, pouches, a satchel he stuffs robots
-## into, and a robot arm.
+## The hero: an old night watchman. Work jacket, knit cap, stubble, eyes in shadow,
+## flashlight in his right hand, canvas bag on his hip. Grabs with his left hand.
 
 signal caught_one
 
@@ -17,6 +16,10 @@ const DARK_SIGHT := 0.5       # robots see half as far when you're in the dark
 const GRAVITY := 20.0
 const JUMP_VELOCITY := 7.0
 const LOOK_SPEED := 2.6
+const LEG_UPPER := 0.41
+const LEG_LOWER := 0.4
+const ARM_UPPER := 0.3
+const ARM_LOWER := 0.28
 const GRAB_RANGE := 1.7      # he has to get right up to them
 const GRAB_COOLDOWN := 0.5
 const GRAB_TIME := 0.45      # lunge forward, then stuff it over his shoulder
@@ -55,18 +58,11 @@ var body_root: Node3D
 var head_pivot: Node3D
 var head_rot := Vector3.ZERO
 var head_vel := Vector3.ZERO
+var walk_phase := 0.0
 var legs: Array = []
 var feet: Array = []
-var right_arm: Array = []
-var robot_arm: Array = []
-var claw: MeshInstance3D
-var knee_pads: Array = []
-var right_band: MeshInstance3D
-var smoke_origin: Array = []
-var smoke_away: Array = []
-var walk_phase := 0.0
-var cig_tip: MeshInstance3D
-var smoke: Node3D
+var arms: Array = []
+var light_hand: Node3D
 var yaw := 0.0
 var pitch := -0.25
 var flashlight: SpotLight3D
@@ -97,302 +93,226 @@ func _ready() -> void:
 func _build_visual() -> void:
 	visual = Node3D.new()
 	add_child(visual)
-	# Colors pulled from the inspo: worn grey suit, olive gear, brown fur
-	var suit := Color(0.4, 0.43, 0.45)
-	var gear := Color(0.37, 0.38, 0.27)
-	var dark := Color(0.16, 0.16, 0.15)
-	var metal := Color(0.55, 0.6, 0.64)
-	var fur := Color(0.33, 0.23, 0.16)
-	var face := Color(0.85, 0.72, 0.6)
-	var ink := Color(0.07, 0.06, 0.05)
+	var jacket := Color(0.3, 0.28, 0.2)      # worn canvas work jacket
+	var pants := Color(0.18, 0.19, 0.21)
+	var boots := Color(0.2, 0.14, 0.1)
+	var skin := Color(0.66, 0.52, 0.43)
+	var stubble := Color(0.5, 0.45, 0.42)
+	var cap := Color(0.12, 0.14, 0.18)       # navy knit watch cap
 
-	# Everything above the hips lives on body_root, which bounces, leans and squashes.
+	# Everything above the hips lives on body_root, which leans and bobs.
 	body_root = Node3D.new()
 	visual.add_child(body_root)
-	body_root.add_child(Util.mesh(Util.capsule(0.25, 0.62), suit, Vector3(0, 1.2, 0)))
-	# Chest, shoulders and hips give the torso some shape
-	var chest := Util.mesh(Util.sphere(0.2), suit.lightened(0.05), Vector3(0, 1.3, 0.1))
-	chest.scale = Vector3(1.25, 0.85, 0.65)
-	body_root.add_child(chest)
+	var torso := Util.mesh(Util.capsule(0.24, 0.78), jacket, Vector3(0, 1.2, 0))
+	torso.scale = Vector3(1.18, 1.0, 0.85)
+	body_root.add_child(torso)
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.56, 0.16, 0.4)), jacket.darkened(0.08), Vector3(0, 0.88, 0)))  # jacket hem
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.4, 0.1, 0.32)), jacket.darkened(0.25), Vector3(0, 1.56, 0)))   # collar
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.02, 0.6, 0.02)), Color(0.12, 0.11, 0.09), Vector3(0, 1.2, 0.205), false))  # zipper
 	for side in [-1.0, 1.0]:
-		var pad := Util.mesh(Util.sphere(0.1), suit.darkened(0.12), Vector3(0.26 * side, 1.42, 0))
-		pad.scale = Vector3(1.1, 0.75, 1.1)
-		body_root.add_child(pad)
-	var hips := Util.mesh(Util.sphere(0.22), suit.darkened(0.08), Vector3(0, 0.96, 0))
-	hips.scale = Vector3(1.1, 0.55, 1.0)
-	body_root.add_child(hips)
-	# V harness straps meeting at the belt
-	for side in [-1.0, 1.0]:
-		var strap := Util.mesh(Util.box(Vector3(0.05, 0.5, 0.03)), gear, Vector3(0.08 * side, 1.2, 0.235))
-		strap.rotation.z = 0.32 * side
-		body_root.add_child(strap)
-	# Belt with three pouches
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.56, 0.07, 0.52)), dark, Vector3(0, 0.95, 0)))
-	for x in [-0.13, 0.0, 0.13]:
-		body_root.add_child(Util.mesh(Util.box(Vector3(0.1, 0.13, 0.07)), gear, Vector3(x, 0.93, 0.27)))
-		body_root.add_child(Util.mesh(Util.box(Vector3(0.11, 0.045, 0.085)), gear.darkened(0.2), Vector3(x, 0.99, 0.275)))  # pouch flap
-		body_root.add_child(Util.mesh(Util.box(Vector3(0.015, 0.06, 0.01)), dark, Vector3(x, 0.93, 0.31)))
-	# Satchel on his back: caught robots get stuffed in here, and it bulges as it fills
+		body_root.add_child(Util.mesh(Util.box(Vector3(0.14, 0.05, 0.03)), jacket.darkened(0.2), Vector3(0.12 * side, 1.02, 0.2)))  # pocket flaps
+		body_root.add_child(Util.mesh(Util.box(Vector3(0.12, 0.05, 0.03)), jacket.darkened(0.2), Vector3(0.12 * side, 1.34, 0.2)))
+	# Watchman's patch
+	body_root.add_child(Util.mesh(Util.box(Vector3(0.09, 0.05, 0.02)), Color(0.55, 0.5, 0.35), Vector3(0.13, 1.4, 0.215), false))
+
+	# Canvas bag on his left hip, strap across his chest. Caught monkeys go in here.
 	satchel = Node3D.new()
-	satchel.position = Vector3(0, 1.12, -0.3)
+	satchel.position = Vector3(0.3, 0.92, -0.04)
 	body_root.add_child(satchel)
-	satchel.add_child(Util.mesh(Util.box(Vector3(0.34, 0.3, 0.14)), Color(0.45, 0.36, 0.24), Vector3.ZERO))
-	satchel.add_child(Util.mesh(Util.box(Vector3(0.36, 0.12, 0.17)), Color(0.38, 0.3, 0.2), Vector3(0, 0.12, -0.01)))  # flap
-	satchel.add_child(Util.mesh(Util.box(Vector3(0.05, 0.05, 0.02)), Color(0.7, 0.62, 0.4), Vector3(0, 0.08, -0.1)))   # buckle
-	var cross := Util.mesh(Util.box(Vector3(0.04, 0.62, 0.02)), Color(0.38, 0.3, 0.2), Vector3(0.0, 1.22, 0.24))
-	cross.rotation.z = -0.6
-	body_root.add_child(cross)
-	# Flashlight clipped to his chest strap, pointing where he faces
+	satchel.add_child(Util.mesh(Util.box(Vector3(0.12, 0.28, 0.32)), Color(0.42, 0.36, 0.26), Vector3.ZERO))
+	satchel.add_child(Util.mesh(Util.box(Vector3(0.14, 0.1, 0.34)), Color(0.36, 0.3, 0.21), Vector3(0, 0.1, 0)))
+	var strap := Util.mesh(Util.box(Vector3(0.04, 0.85, 0.02)), Color(0.3, 0.25, 0.17), Vector3(0.0, 1.22, 0.215))
+	strap.rotation.z = 0.62
+	body_root.add_child(strap)
+
+	# Head: tired old face, stubble, eyes lost in shadow under the cap
+	head_pivot = Node3D.new()
+	head_pivot.position = Vector3(0, 1.62, 0)
+	body_root.add_child(head_pivot)
+	var neck := CylinderMesh.new()
+	neck.top_radius = 0.06
+	neck.bottom_radius = 0.07
+	neck.height = 0.1
+	neck.radial_segments = 8
+	head_pivot.add_child(Util.mesh(neck, skin.darkened(0.1), Vector3(0, 0.0, 0)))
+	var skull := Util.mesh(Util.sphere(0.13), skin, Vector3(0, 0.15, 0))
+	skull.scale = Vector3(0.95, 1.15, 1.0)
+	head_pivot.add_child(skull)
+	var jaw := Util.mesh(Util.sphere(0.1), stubble, Vector3(0, 0.07, 0.035))
+	jaw.scale = Vector3(1.05, 0.75, 1.0)
+	head_pivot.add_child(jaw)
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.04, 0.06, 0.05)), skin.darkened(0.08), Vector3(0, 0.13, 0.13)))  # nose
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.21, 0.055, 0.04)), Color(0.03, 0.03, 0.03), Vector3(0, 0.19, 0.11), false))  # shadowed eyes
+	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.07, 0.012, 0.02)), Color(0.2, 0.14, 0.12), Vector3(0, 0.055, 0.13), false))  # mouth
+	for side in [-1.0, 1.0]:
+		head_pivot.add_child(Util.mesh(Util.sphere(0.035), skin.darkened(0.05), Vector3(0.125 * side, 0.15, 0)))  # ears
+	var beanie := Util.mesh(Util.sphere(0.145), cap, Vector3(0, 0.235, -0.005))
+	beanie.scale = Vector3(1.0, 0.78, 1.02)
+	head_pivot.add_child(beanie)
+	var fold := CylinderMesh.new()
+	fold.top_radius = 0.142
+	fold.bottom_radius = 0.148
+	fold.height = 0.06
+	fold.radial_segments = 10
+	head_pivot.add_child(Util.mesh(fold, cap.lightened(0.08), Vector3(0, 0.215, 0)))
+
+	# Two-part limbs (upper + lower), bent at the knee and elbow every frame
+	for side in [-1.0, 1.0]:
+		legs.append([Util.mesh(Util.capsule(0.085, LEG_UPPER + 0.1), pants, Vector3.ZERO),
+			Util.mesh(Util.capsule(0.07, LEG_LOWER + 0.08), pants.darkened(0.05), Vector3.ZERO)])
+		for seg in legs[-1]:
+			visual.add_child(seg)
+		var boot := Util.mesh(Util.box(Vector3(0.13, 0.11, 0.28)), boots, Vector3(0.13 * side, 0.055, 0.04))
+		visual.add_child(boot)
+		feet.append(boot)
+	for i in 2:
+		arms.append([Util.mesh(Util.capsule(0.065, ARM_UPPER + 0.08), jacket, Vector3.ZERO),
+			Util.mesh(Util.capsule(0.055, ARM_LOWER + 0.06), jacket.darkened(0.05), Vector3.ZERO)])
+		for seg in arms[-1]:
+			body_root.add_child(seg)
+
+	# Right hand holds the flashlight; the beam moves with his arm
+	light_hand = Node3D.new()
+	light_hand.position = Vector3(-0.24, 1.15, 0.36)
+	body_root.add_child(light_hand)
+	light_hand.add_child(Util.mesh(Util.sphere(0.05), skin, Vector3.ZERO))
+	var torch := CylinderMesh.new()
+	torch.top_radius = 0.035
+	torch.bottom_radius = 0.03
+	torch.height = 0.22
+	torch.radial_segments = 8
+	var body_mesh := Util.mesh(torch, Color(0.1, 0.1, 0.11), Vector3(0, 0.0, 0.06))
+	body_mesh.rotation.x = PI / 2.0
+	light_hand.add_child(body_mesh)
+	var lens := MeshInstance3D.new()
+	lens.mesh = Util.box(Vector3(0.06, 0.06, 0.02))
+	lens.material_override = Util.mat(Color(1.0, 0.97, 0.85), true)
+	lens.position = Vector3(0, 0, 0.175)
+	light_hand.add_child(lens)
 	flashlight = SpotLight3D.new()
-	flashlight.position = Vector3(0.12, 1.36, 0.28)
-	flashlight.rotation = Vector3(-0.12, PI, 0)
+	flashlight.position = Vector3(0, 0, 0.19)
+	flashlight.rotation = Vector3(0, PI, 0)
 	flashlight.spot_range = 18.0
-	flashlight.spot_angle = 26.0
+	flashlight.spot_angle = 24.0
 	flashlight.spot_attenuation = 0.9
 	flashlight.light_energy = 8.0
 	flashlight.light_color = Color(1.0, 0.95, 0.85)
 	flashlight.shadow_enabled = true
-	body_root.add_child(flashlight)
-	body_root.add_child(Util.mesh(Util.box(Vector3(0.08, 0.08, 0.12)), Color(0.12, 0.12, 0.12), Vector3(0.12, 1.36, 0.25)))
-	var lens := MeshInstance3D.new()
-	lens.mesh = Util.box(Vector3(0.06, 0.06, 0.02))
-	lens.material_override = Util.mat(Color(1.0, 0.97, 0.85), true)
-	lens.position = Vector3(0.12, 1.36, 0.315)
-	body_root.add_child(lens)
-	# Robot arm's shoulder joint (his left)
-	body_root.add_child(Util.mesh(Util.sphere(0.09), Color(0.91, 0.51, 0.23), Vector3(0.3, 1.38, 0)))
+	light_hand.add_child(flashlight)
 
-	# Head on a springy pivot (no helmet)
-	head_pivot = Node3D.new()
-	head_pivot.position = Vector3(0, 1.5, 0)
-	body_root.add_child(head_pivot)
-	head_pivot.add_child(Util.mesh(Util.sphere(0.26), fur, Vector3(0, 0.24, 0)))
-	for tuft in [[-0.04, 0.3, 0.15], [0.06, 0.25, -0.2]]:
-		var spike := Util.mesh(Util.box(Vector3(0.05, 0.16, 0.05)), fur, Vector3(tuft[0], 0.52, 0.02))
-		spike.rotation = Vector3(0, 0, tuft[2] * 2.0)
-		head_pivot.add_child(spike)
-	var mask := Util.mesh(Util.sphere(0.2), face, Vector3(0, 0.2, 0.11))
-	mask.scale = Vector3(1.05, 1.0, 0.75)
-	head_pivot.add_child(mask)
-	# His right ear: plain. His left ear: big, with a bite chewed out of it.
-	head_pivot.add_child(Util.mesh(Util.sphere(0.08), face, Vector3(-0.26, 0.22, 0)))
-	for e in [[0.28, 0.3, 0.0], [0.34, 0.2, -0.01], [0.3, 0.11, 0.03]]:
-		head_pivot.add_child(Util.mesh(Util.sphere(0.065), face, Vector3(e[0], e[1], e[2])))
-	# Droopy half-lidded eye (his right) and an X for the other one
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.05, 0.035, 0.02)), ink, Vector3(-0.07, 0.222, 0.262), false))
-	var lid := Util.mesh(Util.box(Vector3(0.075, 0.018, 0.02)), ink, Vector3(-0.07, 0.243, 0.26), false)
-	lid.rotation.z = -0.25
-	head_pivot.add_child(lid)
-	for r in [0.785, -0.785]:
-		var stroke := Util.mesh(Util.box(Vector3(0.075, 0.016, 0.02)), ink, Vector3(0.07, 0.235, 0.255), false)
-		stroke.rotation.z = r
-		head_pivot.add_child(stroke)
-	# Brow ridge and a muzzle that sticks out, so the face has depth
-	var brow := Util.mesh(Util.sphere(0.12), fur.darkened(0.1), Vector3(0, 0.29, 0.17))
-	brow.scale = Vector3(1.55, 0.32, 0.75)
-	head_pivot.add_child(brow)
-	var snout := Util.mesh(Util.sphere(0.11), face.lightened(0.06), Vector3(0, 0.12, 0.2))
-	snout.scale = Vector3(1.25, 0.8, 0.85)
-	head_pivot.add_child(snout)
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.03, 0.022, 0.02)), ink, Vector3(0.0, 0.17, 0.286), false))   # nose
-	head_pivot.add_child(Util.mesh(Util.box(Vector3(0.1, 0.016, 0.02)), ink, Vector3(0.0, 0.1, 0.285), false))    # mouth
-	for side in [-1.0, 1.0]:  # cheeks
-		head_pivot.add_child(Util.mesh(Util.sphere(0.06), face.darkened(0.05), Vector3(0.12 * side, 0.15, 0.17)))
-	# Neck
-	var neck := CylinderMesh.new()
-	neck.top_radius = 0.09
-	neck.bottom_radius = 0.11
-	neck.height = 0.14
-	neck.radial_segments = 8
-	head_pivot.add_child(Util.mesh(neck, suit, Vector3(0, -0.03, 0)))
-	# Cigarette floats in front of his mouth, cartoon style. It's on the body, not the
-	# head, so it stays put while his head bobbles.
-	var cig := Util.mesh(Util.box(Vector3(0.028, 0.028, 0.24)), Color(0.95, 0.93, 0.88), Vector3(-0.13, 1.6, 0.37))
-	cig.rotation = Vector3(-0.12, -1.05, 0)
-	body_root.add_child(cig)
-	cig.add_child(Util.mesh(Util.box(Vector3(0.03, 0.03, 0.06)), Color(0.85, 0.6, 0.35), Vector3(0, 0, -0.09)))  # filter at his lips
-	cig_tip = MeshInstance3D.new()
-	cig_tip.mesh = Util.sphere(0.022)
-	cig_tip.material_override = Util.mat(Color(1.0, 0.45, 0.1), true)
-	cig_tip.position = Vector3(0, 0, 0.125)
-	cig.add_child(cig_tip)
-	# Smoke trails up from the tip in world space
-	smoke = Node3D.new()
-	smoke.top_level = true
-	add_child(smoke)
-	for i in 16:
-		var puff := MeshInstance3D.new()
-		puff.mesh = Util.sphere(0.09)
-		puff.material_override = Util.mat(Color(0.88, 0.9, 0.92, 0.6), true)
-		puff.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		smoke.add_child(puff)
-		smoke_origin.append(Vector3.ZERO)
-		smoke_away.append(Vector3.ZERO)
-
-	# Long, lanky noodle limbs
-	for side in [-1.0, 1.0]:
-		legs.append(_make_noodle(14, 0.06, suit, Color()))
-		var pad := Util.mesh(Util.sphere(0.085), dark, Vector3.ZERO)
-		pad.scale = Vector3(1, 1.15, 0.7)
-		visual.add_child(pad)
-		knee_pads.append(pad)
-		var boot := Util.mesh(Util.sphere(0.12), dark, Vector3(0.14 * side, 0.08, 0.05))
-		boot.scale = Vector3(1.0, 0.75, 1.6)
-		visual.add_child(boot)
-		boot.add_child(Util.mesh(Util.box(Vector3(0.17, 0.05, 0.14)), gear, Vector3(0, 0.13, -0.03)))  # boot band
-		boot.add_child(Util.mesh(Util.box(Vector3(0.21, 0.04 / 0.75, 0.36 / 1.6)), Color(0.08, 0.08, 0.08), Vector3(0, -0.085 / 0.75, 0)))  # sole
-		feet.append(boot)
-	right_arm = _make_noodle(12, 0.05, suit, Color())
-	robot_arm = _make_noodle(13, 0.055, metal, Color(0.32, 0.36, 0.4))  # accordion-striped spring arm
-	right_band = Util.mesh(Util.sphere(0.065), gear, Vector3.ZERO)
-	visual.add_child(right_band)
-	claw = Util.mesh(Util.sphere(0.08), Color(0.4, 0.45, 0.5), Vector3.ZERO)
-	claw.scale = Vector3(1, 0.8, 1.25)
-	body_root.add_child(claw)
-	claw.add_child(Util.mesh(Util.box(Vector3(0.03, 0.12, 0.03)), metal, Vector3(-0.04, -0.09, 0.04)))
-	claw.add_child(Util.mesh(Util.box(Vector3(0.03, 0.12, 0.03)), metal, Vector3(0.04, -0.09, 0.04)))
-
-	# His right hand (chimp hand) does the grabbing
+	# Left hand grabs
 	net_pivot = Node3D.new()
-	net_pivot.position = Vector3(-0.4, 0.78, 0.08)
+	net_pivot.position = Vector3(0.32, 0.9, 0.05)
 	body_root.add_child(net_pivot)
-	net_pivot.add_child(Util.mesh(Util.sphere(0.075), face, Vector3.ZERO))
-	for f in 3:
-		net_pivot.add_child(Util.mesh(Util.box(Vector3(0.025, 0.025, 0.07)), face.darkened(0.1), Vector3(-0.04 + f * 0.04, -0.03, 0.07)))
+	net_pivot.add_child(Util.mesh(Util.sphere(0.055), skin, Vector3.ZERO))
 
 
-func _make_noodle(count: int, radius: float, color: Color, stripe: Color) -> Array:
-	var balls := []
-	for i in count:
-		var c := stripe if stripe != Color() and i % 2 == 1 else color
-		var b := Util.mesh(Util.sphere(radius), c, Vector3.ZERO)
-		visual.add_child(b)
-		balls.append(b)
-	return balls
+## Two-bone limb: places the upper and lower segments from a (hip/shoulder) to b
+## (ankle/wrist), bending the joint toward `pole`.
+static func _limb(segs: Array, a: Vector3, b: Vector3, l1: float, l2: float, pole: Vector3) -> void:
+	var to := b - a
+	var d := clampf(to.length(), 0.01, (l1 + l2) * 0.999)
+	var dir := to.normalized()
+	var along := (l1 * l1 - l2 * l2 + d * d) / (2.0 * d)
+	var h := sqrt(maxf(0.0, l1 * l1 - along * along))
+	var side := (pole - dir * pole.dot(dir)).normalized()
+	var joint := a + dir * along + side * h
+	var end := a + dir * d
+	_place(segs[0], a, joint)
+	_place(segs[1], joint, end)
 
 
-## Lays the balls along a curve from a to b. If the ends are closer than the limb's
-## length, it bows out sideways like a rubber hose instead of shrinking.
-static func _noodle(balls: Array, a: Vector3, b: Vector3, length: float, bend: Vector3) -> void:
-	var d := a.distance_to(b)
-	var bow := sqrt(maxf(0.0, length * length - d * d)) * 0.55
-	var mid := (a + b) * 0.5 + bend.normalized() * bow
-	var n := balls.size()
-	for i in n:
-		var u := float(i) / float(n - 1)
-		balls[i].position = a.lerp(mid, u).lerp(mid.lerp(b, u), u)
+static func _place(seg: Node3D, p: Vector3, q: Vector3) -> void:
+	var up := (q - p).normalized()
+	if up.length() < 0.5:
+		return
+	seg.transform = Transform3D(Basis(Quaternion(Vector3.UP, up)), (p + q) * 0.5)
 
 
-## Rubber hose animation: bounce to the beat, tiptoe sneaking, windmill running,
-## flailing in the air, springy head. Bigger when the rubber hose style is on.
+## Grounded, heavy animation: small bob, hunch when sneaking, flashlight held out front.
 func _animate(delta: float, on_floor: bool) -> void:
 	var amp := Util.amp()
 	var t := Time.get_ticks_msec() * 0.001
-	var beat := Util.beat()
 	var hs := Vector2(velocity.x, velocity.z).length()
 	var running := move_mode.begins_with("Running")
 	var sneaky := crouching or move_mode.begins_with("Sneaking")
 	var moving := hs > 0.2 and on_floor
 	if moving:
-		walk_phase += hs * delta * (2.4 if running else 4.2)
+		walk_phase += hs * delta * (2.6 if running else 3.4)
 
-	# Body: bounce, lean, sway, squash and stretch
+	# Body: small bob, lean forward when running, hunch when sneaking
 	var body_y := 0.0
-	var lean := 0.0
+	var lean := 0.04
 	var sway := 0.0
-	var stretch := 0.0
 	if not on_floor:
-		lean = -0.2 * amp
-		stretch = 0.12 * amp
+		lean = -0.08
 	elif moving:
-		var b := absf(sin(walk_phase))
-		body_y = b * (0.2 if running else 0.13) * amp
-		stretch = (b - 0.5) * 0.22 * amp
-		lean = (0.4 if running else (0.3 if sneaky else 0.12)) * amp
-		sway = sin(walk_phase) * (0.1 if running else 0.18) * amp
+		body_y = absf(sin(walk_phase)) * (0.05 if running else 0.03) - 0.02
+		lean = 0.22 if running else (0.28 if sneaky else 0.07)
+		sway = sin(walk_phase) * 0.03
 	else:
-		var b := absf(sin(beat * 0.5))
-		body_y = b * 0.08 * amp
-		stretch = (b - 0.5) * 0.14 * amp
-		sway = sin(beat * 0.25) * 0.12 * amp
+		body_y = sin(t * 1.6) * 0.008  # breathing
 	if crouching:
-		body_y -= 0.4
-	var k := clampf(16.0 * delta, 0.0, 1.0)
+		body_y -= 0.38
+	var k := clampf(10.0 * delta, 0.0, 1.0)
 	body_root.position.y = lerp(body_root.position.y, body_y, k)
 	body_root.rotation.x = lerp_angle(body_root.rotation.x, lean, k)
 	body_root.rotation.z = lerp_angle(body_root.rotation.z, sway, k)
-	body_root.scale = body_root.scale.lerp(Vector3(1.0 - stretch * 0.5, 1.0 + stretch, 1.0 - stretch * 0.5), k)
 
-	# Springy head: lags behind the body, overshoots, wobbles back
-	var head_target := Vector3(-lean * 0.9, 0.0, -sway * 1.6)
-	head_vel += (head_target - head_rot) * 140.0 * delta
-	head_vel -= head_vel * 7.0 * delta
+	# Head settles with a slight lag
+	var head_target := Vector3(-lean * 0.6, 0.0, -sway)
+	head_vel += (head_target - head_rot) * 90.0 * delta
+	head_vel -= head_vel * 12.0 * delta
 	head_rot += head_vel * delta
 	head_pivot.rotation = head_rot
 
-	# Feet
+	# Legs
 	for i in 2:
 		var side := -1.0 if i == 0 else 1.0
 		var ph := walk_phase + (PI if i == 1 else 0.0)
-		var foot := Vector3(0.16 * side, 0.08, 0.05)
+		var foot := Vector3(0.13 * side, 0.055, 0.04)
 		var pitch_foot := 0.0
 		if not on_floor:
-			foot += Vector3(0.06 * side, 0.32, -0.12 + 0.12 * sin(t * 22.0 + i * PI)) * amp
+			foot += Vector3(0.0, 0.25, -0.1 if i == 0 else 0.12)
 		elif moving:
-			var stride := (0.48 if running else (0.24 if sneaky else 0.3)) * amp
-			var lift := (0.32 if running else (0.4 if sneaky else 0.18)) * amp
+			var stride := 0.45 if running else (0.22 if sneaky else 0.3)
+			var lift := 0.22 if running else (0.16 if sneaky else 0.12)
 			foot.z += sin(ph) * stride
 			foot.y += maxf(0.0, cos(ph)) * lift
-			pitch_foot = -cos(ph) * 0.6 * amp
-			if sneaky:
-				pitch_foot += 0.5 * amp  # up on tiptoes
-		elif i == 1:
-			foot.y += maxf(0.0, sin(beat)) * 0.07 * amp  # toe-tap on the beat
-			pitch_foot = -maxf(0.0, sin(beat)) * 0.5 * amp
+			pitch_foot = -cos(ph) * 0.35
 		feet[i].position = feet[i].position.lerp(foot, clampf(25.0 * delta, 0.0, 1.0))
 		feet[i].rotation.x = pitch_foot
-		var hip := body_root.transform * Vector3(0.13 * side, 0.92, 0)
-		_noodle(legs[i], hip, feet[i].position + Vector3(0, 0.07, -0.04), 0.9, Vector3(0.35 * side, 0.0, 1.0))
-		knee_pads[i].position = legs[i][legs[i].size() / 2].position + Vector3(0, 0, 0.04)
+		var hip := body_root.transform * Vector3(0.12 * side, 0.9, 0)
+		_limb(legs[i], hip, feet[i].position + Vector3(0, 0.07, -0.05), LEG_UPPER, LEG_LOWER, Vector3(0.1 * side, 0, 1))
 
-	# Arms (hand targets are in body space)
-	var net_hand := Vector3(-0.4, 0.78, 0.08)
-	var claw_hand := Vector3(0.4, 0.74, 0.02)
+	# Flashlight hand: held out front, bobbing a bit when walking, pumping when running
+	var light_target := Vector3(-0.22, 1.16, 0.38)
+	if moving:
+		light_target.y += sin(walk_phase * 2.0) * (0.04 if running else 0.015)
+		light_target.z += sin(walk_phase) * (0.08 if running else 0.0)
 	if not on_floor:
-		var f := sin(t * 18.0) * 0.15 * amp
-		net_hand = Vector3(-0.58, 1.78 + f, 0.0)
-		claw_hand = Vector3(0.58, 1.78 - f, 0.05)
-	elif moving and running:
-		var a := walk_phase * 2.0
-		claw_hand = Vector3(0.42, 1.38, 0.0) + Vector3(0, sin(a), cos(a)) * 0.55 * amp  # windmill
-		net_hand = Vector3(-0.4, 0.85, 0.08 - sin(walk_phase) * 0.4 * amp)
-	elif moving and sneaky:
-		var w := sin(walk_phase) * 0.05 * amp
-		net_hand = Vector3(-0.32, 1.36 + w, 0.32)   # hands up like claws, tiptoeing
-		claw_hand = Vector3(0.3, 1.36 - w, 0.34)
-	elif moving:
-		net_hand.z -= sin(walk_phase) * 0.28 * amp
-		claw_hand.z += sin(walk_phase) * 0.32 * amp
-	else:
-		net_hand.z += sin(beat * 0.5) * 0.06 * amp
-		claw_hand.z -= sin(beat * 0.5) * 0.08 * amp
-		claw_hand.y += absf(sin(beat * 0.5)) * 0.06 * amp
-	if holding:
-		# Arm around his neck, robot hand cranking the key on his back
-		net_hand = Vector3(-0.12, 1.3, 0.5)
-		claw_hand = Vector3(0.12, 1.02 + 0.05 * sin(t * 25.0), 0.42)
-	elif grab_timer > 0.0:
-		# Lunge the hand out, then swing it back over his shoulder to the satchel
-		var g := 1.0 - grab_timer / GRAB_TIME
-		net_hand = Vector3(-0.12, 1.15, 0.8) if g < 0.45 else Vector3(-0.15, 1.6, -0.35)
-	net_pivot.position = net_pivot.position.lerp(net_hand, clampf((24.0 if grab_timer > 0.0 else 14.0) * delta, 0.0, 1.0))
-	claw.position = claw.position.lerp(claw_hand, clampf(14.0 * delta, 0.0, 1.0))
-	var bt := body_root.transform
-	_noodle(right_arm, bt * Vector3(-0.3, 1.38, 0), bt * net_pivot.position, 0.8, Vector3(-1.0, -0.5, -0.3))
-	_noodle(robot_arm, bt * Vector3(0.3, 1.38, 0), bt * claw.position, 0.84, Vector3(1.0, -0.5, -0.3))
-	right_band.position = right_arm[right_arm.size() - 3].position  # wristband
+		light_target = Vector3(-0.3, 1.35, 0.3)
+	light_hand.position = light_hand.position.lerp(light_target, clampf(14.0 * delta, 0.0, 1.0))
+	light_hand.rotation.x = lerp_angle(light_hand.rotation.x, 0.18 - lean, clampf(10.0 * delta, 0.0, 1.0))  # aim a little down
 
-	# Landing squash recovers on the whole figure
+	# Grab hand (left): swings opposite his left foot, reaches out on a grab
+	var grab_hand := Vector3(0.32, 0.88, 0.05)
+	if moving:
+		grab_hand.z -= sin(walk_phase + PI) * (0.3 if running else 0.18)
+		if sneaky:
+			grab_hand = Vector3(0.28, 1.1, 0.25)  # hand out, ready
+	if not on_floor:
+		grab_hand = Vector3(0.45, 1.4, 0.05)
+	if holding:
+		grab_hand = Vector3(0.1, 1.02 + 0.04 * sin(t * 25.0), 0.42)  # cranking the key on its back
+	elif grab_timer > 0.0:
+		var g := 1.0 - grab_timer / GRAB_TIME
+		grab_hand = Vector3(0.12, 1.1, 0.78) if g < 0.45 else Vector3(0.32, 0.95, -0.02)  # snatch, then into the bag
+	net_pivot.position = net_pivot.position.lerp(grab_hand, clampf((24.0 if grab_timer > 0.0 else 12.0) * delta, 0.0, 1.0))
+
+	_limb(arms[0], Vector3(-0.27, 1.5, 0), light_hand.position, ARM_UPPER, ARM_LOWER, Vector3(-0.6, -0.3, -1))
+	_limb(arms[1], Vector3(0.27, 1.5, 0), net_pivot.position, ARM_UPPER, ARM_LOWER, Vector3(0.6, -0.3, -1))
+
 	visual.scale = visual.scale.lerp(Vector3.ONE, clampf(10.0 * delta, 0.0, 1.0))
 
 
@@ -456,7 +376,7 @@ func _physics_process(delta: float) -> void:
 
 	if is_on_floor() and not crouching and holding == null and Input.is_action_just_pressed("jump"):
 		velocity.y = JUMP_VELOCITY
-		head_vel.x -= 6.0 * Util.amp()
+		head_vel.x -= 1.5
 	elif is_on_floor() and velocity.y <= 0.0:
 		velocity.y = 0.0
 	else:
@@ -467,9 +387,8 @@ func _physics_process(delta: float) -> void:
 	var on_floor := is_on_floor()
 	if on_floor and not was_on_floor and air_time > 0.25:
 		make_noise(LAND_NOISE)
-		var sq := Util.amp()
-		visual.scale = Vector3(1.0 + 0.45 * sq, 1.0 - 0.45 * sq, 1.0 + 0.45 * sq)
-		head_vel.x += 7.0 * sq
+		visual.scale = Vector3(1.04, 0.94, 1.04)
+		head_vel.x += 2.0
 	air_time = 0.0 if on_floor else air_time + delta
 	was_on_floor = on_floor
 
@@ -486,7 +405,6 @@ func _physics_process(delta: float) -> void:
 		visual.rotation.y = lerp_angle(visual.rotation.y, atan2(dir.x, dir.z), 12.0 * delta)
 	_animate(delta, on_floor)
 
-	_animate_smoke()
 
 	# Flashlight
 	if Input.is_action_just_pressed("light"):
@@ -604,24 +522,3 @@ func make_noise(radius: float, color := Color(0, 0, 0, 0)) -> void:
 	get_tree().call_group("gatherers", "hear_noise", global_position, radius, self)
 
 
-## Thick smoke drifts up from the cigarette and trails behind him; the tip pulses.
-func _animate_smoke() -> void:
-	# Each puff leaves the cigarette tip, drifts up and grows, then starts over.
-	var t := Time.get_ticks_msec() * 0.001
-	var tip := cig_tip.global_position
-	var n := smoke.get_child_count()
-	for i in n:
-		var puff: MeshInstance3D = smoke.get_child(i)
-		var life := fposmod(t * 0.32 + float(i) / n, 1.0)
-		if life < 0.05 or smoke_origin[i] == Vector3.ZERO:
-			smoke_origin[i] = tip
-			var away := tip - head_pivot.global_position
-			away.y = 0.0
-			smoke_away[i] = away.normalized() if away.length() > 0.01 else Vector3.ZERO
-		var o: Vector3 = smoke_origin[i] + smoke_away[i] * life * 0.45  # drift away from his face
-		# Puffs stay where they were puffed, so moving leaves a trail behind him
-		puff.global_position = o + Vector3(sin(t * 1.6 + i) * 0.14 * life, life * 1.3, cos(t * 1.3 + i) * 0.12 * life)
-		puff.scale = Vector3.ONE * (0.5 + life * 1.5)
-		(puff.material_override as StandardMaterial3D).albedo_color.a = 0.45 * (1.0 - life * life)
-	var glow := 0.75 + 0.25 * sin(t * 3.0)
-	(cig_tip.material_override as StandardMaterial3D).albedo_color = Color(1.0, 0.35 * glow + 0.1, 0.05)

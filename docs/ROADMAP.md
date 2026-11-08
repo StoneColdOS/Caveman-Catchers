@@ -33,7 +33,8 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Flashlight with real stealth tradeoff: on = you can see, robots spot you from full range; off = half range. Lamplight lights you up
 - [x] PS1 screen: low resolution, chunky pixels, ordered color dithering
 - [x] Heavier movement (slower acceleration, barely any bounce) and a close over-the-shoulder camera
-- [ ] Characters redesigned for the horror look (in discussion)
+- [x] Characters redesigned for horror: old night watchman (flashlight in hand, shadowed eyes, canvas bag) vs creepy wind-up cymbal monkeys from a shut-down toy factory that clap their cymbals in the dark
+- [ ] Sound: wind, crunching snow footsteps, distant cymbal clacks (the biggest missing piece for scary)
 - [ ] Maybe: fixed cinematic camera angles in places, like classic Resident Evil
 
 ---

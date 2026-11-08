@@ -2,7 +2,7 @@
 
 *Catch those damn dirty humans.*
 
-A 3D stealth-catching game: a grumpy old space chimp sneaks up on janky, broken robot monkeys in the jungle and stuffs them in his satchel. Ape Escape 2/3 catching meets Metal Gear Solid stealth, with rubber hose animation and a pixel low-poly look.
+A PS1-style survival-horror stealth game: an old night watchman hunts escaped wind-up cymbal monkeys through snowy woods at night, sneaking up with his flashlight off, grabbing them, and winding them down. Ape Escape catching meets Metal Gear Solid stealth.
 
 Built in Godot 4.7, targeting the AYN Thor handheld.
 

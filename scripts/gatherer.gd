@@ -1,5 +1,6 @@
 extends CharacterBody3D
-## The standard janky robot monkey (internally still called a Gatherer).
+## A creepy life-size wind-up cymbal monkey, escaped from the old toy factory
+## (internally still called a Gatherer).
 ##   Calm:        wanders, forages with his head down (half blind), stops to look around.
 ##   Hears noise: hops, says "?", walks over to check it out, looks around.
 ##   Sees you:    stares while his "?" grows. Lose him and he checks where he last saw you.
@@ -70,6 +71,8 @@ var head_pop := 0.0
 var head_pop_vel := 0.0
 var walk_phase := 0.0
 var hold_progress := 0.0
+var clap_timer := randf_range(1.0, 5.0)
+var clap_t := 0.0
 var cone: MeshInstance3D
 var cone_mat: StandardMaterial3D
 var alert: Label3D
@@ -102,70 +105,91 @@ func _build_visual() -> void:
 	torso = Node3D.new()
 	torso.position.y = 0.2
 	visual.add_child(torso)
-	# Each robot gets a slightly different, slightly wrong look.
-	var tins := [Color(0.42, 0.6, 0.6), Color(0.68, 0.5, 0.36), Color(0.55, 0.57, 0.62), Color(0.64, 0.6, 0.42)]
-	var tin: Color = tins[randi() % tins.size()]
-	var rust := Color(0.5, 0.3, 0.18)
+	# Life-size wind-up cymbal monkey toy, left out in the cold too long.
+	var furs := [Color(0.3, 0.2, 0.13), Color(0.36, 0.25, 0.16), Color(0.26, 0.19, 0.14)]
+	var fur: Color = furs[randi() % furs.size()]
+	var face := Color(0.84, 0.77, 0.66)        # pale, cracked vinyl face
+	var vest := Color(0.5, 0.07, 0.08)
+	var brass := Color(0.78, 0.62, 0.26)
 	var y := -0.2
-	# Boxy tin body with a rust patch, stubby legs
-	var body := Util.mesh(Util.box(Vector3(0.62, 0.66, 0.5)), tin, Vector3(0, 0.78 + y, 0))
-	body.rotation.z = randf_range(-0.08, 0.08)
+	var body := Util.mesh(Util.capsule(0.25, 0.62), fur, Vector3(0, 0.8 + y, 0))
+	body.rotation.z = randf_range(-0.06, 0.06)
 	torso.add_child(body)
-	torso.add_child(Util.mesh(Util.box(Vector3(0.2, 0.16, 0.02)), rust, Vector3(-0.14, 0.66 + y, 0.26)))
-	# Chest panel with speaker slots and corner rivets, so the body isn't a plain box
-	torso.add_child(Util.mesh(Util.box(Vector3(0.3, 0.26, 0.03)), tin.darkened(0.18), Vector3(0.08, 0.84 + y, 0.255)))
-	for i in 3:
-		torso.add_child(Util.mesh(Util.box(Vector3(0.2, 0.025, 0.02)), Color(0.12, 0.12, 0.12), Vector3(0.08, 0.9 + y - i * 0.06, 0.272), false))
-	for cx in [-0.27, 0.27]:
-		for cy in [0.5, 1.06]:
-			torso.add_child(Util.mesh(Util.sphere(0.03), tin.lightened(0.25), Vector3(cx, cy + y, 0.255), false))
+	# Striped vest with brass buttons, little blue shorts
+	torso.add_child(Util.mesh(Util.box(Vector3(0.53, 0.34, 0.45)), vest, Vector3(0, 0.86 + y, 0)))
+	for sy in [0.8, 0.94]:
+		torso.add_child(Util.mesh(Util.box(Vector3(0.54, 0.035, 0.46)), Color(0.85, 0.82, 0.74), Vector3(0, sy + y, 0), false))
+	for by in [0.82, 0.9, 0.98]:
+		torso.add_child(Util.mesh(Util.sphere(0.022), brass, Vector3(0.0, by + y, 0.235), false))
+	torso.add_child(Util.mesh(Util.box(Vector3(0.48, 0.16, 0.4)), Color(0.15, 0.2, 0.38), Vector3(0, 0.6 + y, 0)))
 	# Legs and arms hang from pivots so they can swing, scissor and flail.
 	for side in [-1.0, 1.0]:
 		var hip := Node3D.new()
-		hip.position = Vector3(0.16 * side, 0.47 + y, 0)
+		hip.position = Vector3(0.14 * side, 0.52 + y, 0)
 		torso.add_child(hip)
-		hip.add_child(Util.mesh(Util.box(Vector3(0.16, 0.3, 0.18)), tin.darkened(0.3), Vector3(0, -0.15, 0)))
-		hip.add_child(Util.mesh(Util.box(Vector3(0.2, 0.08, 0.28)), tin.darkened(0.45), Vector3(0, -0.3, 0.04)))
+		hip.add_child(Util.mesh(Util.box(Vector3(0.13, 0.3, 0.14)), fur, Vector3(0, -0.15, 0)))
+		hip.add_child(Util.mesh(Util.box(Vector3(0.15, 0.06, 0.22)), face.darkened(0.15), Vector3(0, -0.31, 0.04)))
 		legs.append(hip)
 	for side in [-1.0, 1.0]:
 		var sh := Node3D.new()
-		sh.position = Vector3(0.38 * side, 0.95 + y, 0.02)
+		sh.position = Vector3(0.32 * side, 1.0 + y, 0.02)
 		torso.add_child(sh)
-		var length := 0.46 if side < 0.0 else 0.42  # the broken one hangs longer
-		sh.add_child(Util.mesh(Util.box(Vector3(0.1, length, 0.1)), tin.darkened(0.2), Vector3(0, -length / 2.0, 0)))
-		sh.add_child(Util.mesh(Util.sphere(0.08), tin.lightened(0.2), Vector3(0, -length, 0)))
+		sh.add_child(Util.mesh(Util.box(Vector3(0.09, 0.4, 0.09)), fur, Vector3(0, -0.2, 0)))
+		sh.add_child(Util.mesh(Util.sphere(0.06), face.darkened(0.1), Vector3(0, -0.42, 0)))
+		var cymbal := CylinderMesh.new()
+		cymbal.top_radius = 0.05
+		cymbal.bottom_radius = 0.17
+		cymbal.height = 0.04
+		cymbal.radial_segments = 12
+		var c := Util.mesh(cymbal, brass, Vector3(-0.05 * side, -0.44, 0.04))
+		c.rotation.z = -PI / 2.0 * side  # dish faces inward, toward the other cymbal
+		sh.add_child(c)
 		arms.append(sh)
-	# TV-screen head on a spring neck, round ears
-	neck = Util.mesh(Util.box(Vector3(0.08, 0.14, 0.08)), Color(0.3, 0.3, 0.32), Vector3(0, 1.17 + y, 0))
+	neck = Util.mesh(Util.box(Vector3(0.1, 0.14, 0.1)), fur.darkened(0.2), Vector3(0, 1.17 + y, 0))
 	torso.add_child(neck)
-	head_base_y = 1.42 + y
+	head_base_y = 1.36 + y
 	head = Node3D.new()
 	head.position = Vector3(0, head_base_y, 0)
 	torso.add_child(head)
-	head.add_child(Util.mesh(Util.box(Vector3(0.56, 0.42, 0.4)), tin.lightened(0.1), Vector3.ZERO))
-	head.add_child(Util.mesh(Util.box(Vector3(0.5, 0.36, 0.04)), tin.darkened(0.3), Vector3(0, 0, 0.2)))  # screen bezel
-	head.add_child(Util.mesh(Util.box(Vector3(0.44, 0.3, 0.02)), Color(0.05, 0.07, 0.06), Vector3(0, 0, 0.225), false))
-	head.add_child(Util.mesh(Util.box(Vector3(0.06, 0.06, 0.04)), Color(0.75, 0.2, 0.15), Vector3(0.21, -0.14, 0.22), false))  # knob
-	head.add_child(Util.mesh(Util.sphere(0.12), tin.darkened(0.15), Vector3(-0.32, 0.08, 0)))
-	head.add_child(Util.mesh(Util.sphere(0.12), tin.darkened(0.15), Vector3(0.32, 0.08, 0)))
-	var ant := Util.mesh(Util.box(Vector3(0.02, 0.22, 0.02)), Color(0.3, 0.3, 0.32), Vector3(0.12, 0.3, 0))
-	ant.rotation.z = randf_range(-0.6, 0.6)
-	head.add_child(ant)
-	ant.add_child(Util.mesh(Util.sphere(0.04), Color(0.9, 0.3, 0.2), Vector3(0, 0.12, 0)))  # antenna bulb
-	# Screen eyes (unshaded so they glow); color shows his mood
-	eye_mat = Util.mat(Color(0.3, 1.0, 0.5), true)
-	for ex in [-0.1, 0.1]:
+	head.add_child(Util.mesh(Util.sphere(0.22), fur, Vector3.ZERO))
+	var mask := Util.mesh(Util.sphere(0.17), face, Vector3(0, -0.03, 0.11))
+	mask.scale = Vector3(1.05, 0.95, 0.65)
+	head.add_child(mask)
+	for side in [-1.0, 1.0]:
+		head.add_child(Util.mesh(Util.sphere(0.08), face.darkened(0.08), Vector3(0.22 * side, 0.03, 0)))  # ears
+	# Fixed toothy grin
+	head.add_child(Util.mesh(Util.box(Vector3(0.2, 0.06, 0.03)), Color(0.45, 0.05, 0.06), Vector3(0, -0.1, 0.2), false))
+	head.add_child(Util.mesh(Util.box(Vector3(0.16, 0.025, 0.02)), Color(0.92, 0.9, 0.8), Vector3(0, -0.1, 0.217), false))
+	# Cracks in the vinyl
+	for crack in [[0.07, 0.07, 0.6], [-0.09, -0.04, -0.4], [0.03, -0.14, 0.2]]:
+		var line := Util.mesh(Util.box(Vector3(0.006, 0.07, 0.01)), Color(0.18, 0.13, 0.1), Vector3(crack[0], crack[1], 0.205), false)
+		line.rotation.z = crack[2]
+		head.add_child(line)
+	# Little fez, knocked crooked
+	var fez := CylinderMesh.new()
+	fez.top_radius = 0.075
+	fez.bottom_radius = 0.1
+	fez.height = 0.13
+	fez.radial_segments = 8
+	var hat := Util.mesh(fez, vest, Vector3(0.04, 0.22, 0))
+	hat.rotation.z = randf_range(-0.35, 0.15)
+	head.add_child(hat)
+	hat.add_child(Util.mesh(Util.box(Vector3(0.02, 0.1, 0.02)), Color(0.05, 0.05, 0.05), Vector3(0.06, 0.02, 0), false))  # tassel
+	# Glassy eyes that glow in the dark (unshaded); color shows his mood
+	eye_mat = Util.mat(Color(1.0, 0.92, 0.65), true)
+	for ex in [-0.065, 0.065]:
 		var eye := MeshInstance3D.new()
-		eye.mesh = Util.box(Vector3(0.08, 0.08, 0.02))
+		eye.mesh = Util.sphere(0.042)
 		eye.material_override = eye_mat
-		eye.position = Vector3(ex, 0.03, 0.24)
+		eye.position = Vector3(ex, 0.02, 0.2)
 		head.add_child(eye)
+		head.add_child(Util.mesh(Util.box(Vector3(0.018, 0.035, 0.01)), Color(0.02, 0.02, 0.02), Vector3(ex, 0.02, 0.243), false))  # pupil slit
 	# Wind-up key on his back
 	key = Node3D.new()
-	key.position = Vector3(0, 0.82 + y, -0.3)
+	key.position = Vector3(0, 0.84 + y, -0.27)
 	torso.add_child(key)
-	key.add_child(Util.mesh(Util.box(Vector3(0.04, 0.04, 0.14)), Color(0.75, 0.62, 0.3), Vector3(0, 0, -0.07)))
-	key.add_child(Util.mesh(Util.box(Vector3(0.3, 0.14, 0.03)), Color(0.85, 0.7, 0.3), Vector3(0, 0, -0.15)))
+	key.add_child(Util.mesh(Util.box(Vector3(0.04, 0.04, 0.14)), brass, Vector3(0, 0, -0.07)))
+	key.add_child(Util.mesh(Util.box(Vector3(0.3, 0.14, 0.03)), brass.lightened(0.1), Vector3(0, 0, -0.15)))
 
 	cone = MeshInstance3D.new()
 	cone.mesh = _cone_mesh(SIGHT_RANGE, deg_to_rad(FOV_DEG))
@@ -590,10 +614,10 @@ func _update_indicators(delta: float) -> void:
 func _jank(delta: float) -> void:
 	var spin := 8.0 if state == State.FLEE else (0.0 if state in [State.SLEEP, State.HELD] else 2.0)
 	key.rotation.z += spin * delta
-	var mood := Color(0.3, 1.0, 0.5)
+	var mood := Color(1.0, 0.92, 0.65)  # calm: pale glassy glow
 	match state:
 		State.SUSPICIOUS, State.INVESTIGATE:
-			mood = Color(1.0, 0.85, 0.1)
+			mood = Color(1.0, 0.7, 0.1)
 		State.FLEE:
 			mood = Color(1.0, 0.15, 0.1)
 		State.DROWSY:
@@ -660,7 +684,20 @@ func _dance(delta: float) -> void:
 				bob = absf(sin(beat * 0.5)) * 0.1
 				waddle = sin(beat * 0.25) * 0.14
 				arm_z = [-0.25 - absf(sin(beat * 0.5)) * 0.4, 0.25 + absf(sin(beat * 0.5)) * 0.4]
-	arm_z[0] -= 0.5  # the broken arm always droops
+	# Cymbal clap: arms swing forward and in until the cymbals meet. Clack.
+	if state != State.SLEEP and state != State.HELD and state != State.CAUGHT:
+		clap_timer -= delta
+		if clap_timer <= 0.0:
+			clap_timer = randf_range(0.35, 0.6) if state == State.FLEE else randf_range(3.0, 6.0)
+			clap_t = 0.22
+			Util.noise_ring(get_parent(), global_position + Vector3.UP * 0.5, 3.5, Color(1.0, 0.82, 0.4, 0.55))
+	if clap_t > 0.0:
+		clap_t -= delta
+		for i in 2:
+			var side := -1.0 if i == 0 else 1.0
+			arm_x[i] = -1.25
+			arm_z[i] = -0.35 * side
+		amp = 1.0
 	var k := clampf(14.0 * delta, 0.0, 1.0)
 	torso.position.y = lerp(torso.position.y, 0.2 + bob * amp, k)
 	torso.rotation.z = lerp_angle(torso.rotation.z, waddle * amp, k)
