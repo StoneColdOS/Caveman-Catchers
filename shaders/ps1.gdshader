@@ -3,8 +3,8 @@ shader_type canvas_item;
 // depth and ordered dithering, like 15-bit color on the original hardware.
 
 uniform sampler2D screen_tex : hint_screen_texture, filter_nearest;
-uniform float pixel_height = 240.0;   // pretend vertical resolution
-uniform float color_levels = 28.0;    // steps per color channel
+uniform float pixel_height = 200.0;   // pretend vertical resolution (PS1 ran 240; lower = chunkier)
+uniform float color_levels = 24.0;    // steps per color channel (lower = more banding)
 
 const float BAYER[16] = {
 	0.0, 8.0, 2.0, 10.0,

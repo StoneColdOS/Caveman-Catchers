@@ -1,26 +1,27 @@
 extends Node3D
-## Builds the night-time snowy woods (PS1 horror look), the player, the robots and the HUD.
+## Builds the night-time snowy woods (heavy PSX look), the mech, the soldiers and the HUD.
 ## Placeholder shapes on purpose: we're testing fun, not final art.
 
 const Util := preload("res://scripts/util.gd")
 const Controls := preload("res://scripts/controls.gd")
 const PlayerScript := preload("res://scripts/player.gd")
-const GathererScript := preload("res://scripts/gatherer.gd")
+const SoldierScript := preload("res://scripts/soldier.gd")
 const TouchScript := preload("res://scripts/touch_controls.gd")
 
 const ARENA := 50.0
 const LAMP_SPOTS := [Vector3(-7, 0, -5), Vector3(9, 0, 4), Vector3(-4, 0, 11), Vector3(14, 0, -14)]
 const LAMP_RADIUS := 5.0
-const GATHERER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
+const SOLDIER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
 
 var player: CharacterBody3D
-var caught := 0
+var caught := 0          # soldiers put down
 var count_label: Label
 var mode_label: Label
 var alert_label: Label
 var game_over := false
 var hint_label: Label
 var hold_bar: ProgressBar
+var armor_bar: ProgressBar
 var snow_emitter: CPUParticles3D
 var ps1: ColorRect
 var message_label: Label
@@ -35,7 +36,7 @@ func _ready() -> void:
 	_build_ground()
 	_build_cover()
 	_spawn_player()
-	_spawn_gatherers()
+	_spawn_soldiers()
 	_build_ps1()
 	_build_hud()
 	_build_debug()
@@ -48,8 +49,6 @@ func _process(delta: float) -> void:
 		get_tree().reload_current_scene()
 	_update_debug()
 	_update_alert()
-	if Input.is_action_just_pressed("style"):
-		Util.set_rubber(get_tree(), not Util.rubber)
 	if snow_emitter and player:
 		snow_emitter.global_position = player.global_position + Vector3(0, 9, 0)
 	if player and mode_label:
@@ -147,7 +146,7 @@ func _update_debug() -> void:
 	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
 	lines.append("Move (%.1f, %.1f)  Look (%.1f, %.1f)" % [move.x, move.y, look.x, look.y])
 	var held: PackedStringArray = []
-	for a in ["crouch", "net", "restart"]:
+	for a in ["crouch", "net", "punch", "restart"]:
 		if Input.is_action_pressed(a):
 			held.append(a)
 	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))
@@ -180,7 +179,13 @@ func _build_environment() -> void:
 
 
 func _build_ground() -> void:
-	_static_box(Vector3(ARENA + 20, 1, ARENA + 20), Vector3(0, -0.5, 0), Color(0.8, 0.84, 0.9))  # snow
+	var ground := _static_box(Vector3(ARENA + 20, 1, ARENA + 20), Vector3(0, -0.5, 0), Color(0.8, 0.84, 0.9), false)  # snow
+	# Cut the ground into 2 m tiles like a PS1 level would, so textures warp per tile
+	var plane := PlaneMesh.new()
+	plane.size = Vector2(ARENA + 20, ARENA + 20)
+	plane.subdivide_width = 34
+	plane.subdivide_depth = 34
+	ground.add_child(Util.mesh(plane, Color(0.8, 0.84, 0.9), Vector3(0, 0.5, 0), false))
 	# Dense dark pines all around the edge (the fog hides how fake it is)
 	var h := ARENA / 2.0
 	var wall := Color(0.04, 0.07, 0.05)
@@ -194,10 +199,12 @@ func _build_ground() -> void:
 func _build_cover() -> void:
 	for i in 14:
 		var p := _random_spot()
-		var size := Vector3(rng.randf_range(1.5, 4.0), rng.randf_range(1.2, 2.8), rng.randf_range(1.5, 4.0))
+		var size := Vector3(rng.randf_range(2.0, 4.5), rng.randf_range(1.8, 3.4), rng.randf_range(2.0, 4.5))
 		var rock := _static_box(size, p + Vector3(0, size.y / 2.0, 0), Color(0.3, 0.3, 0.32))
 		rock.rotation.y = rng.randf() * TAU
 		rock.add_child(Util.mesh(Util.box(Vector3(size.x * 0.92, 0.12, size.z * 0.92)), Color(0.85, 0.88, 0.93), Vector3(0, size.y / 2.0 + 0.05, 0)))  # snow cap
+	for i in 5:
+		_container(_random_spot())
 	for i in 22:
 		_pine(_random_spot())
 	for spot in LAMP_SPOTS:
@@ -205,12 +212,26 @@ func _build_cover() -> void:
 	_snowfall()
 
 
+## A rusted shipping container: mech-sized cover. Crouch behind it and nobody sees you.
+func _container(p: Vector3) -> void:
+	var colors := [Color(0.42, 0.16, 0.1), Color(0.18, 0.28, 0.32), Color(0.32, 0.34, 0.22)]
+	var c: Color = colors[rng.randi() % colors.size()]
+	var size := Vector3(2.5, 2.6, 6.0)
+	var box := _static_box(size, p + Vector3(0, size.y / 2.0, 0), c)
+	box.rotation.y = rng.randf() * TAU
+	for i in 7:
+		var z := -2.6 + i * 0.87
+		for side in [-1.0, 1.0]:
+			box.add_child(Util.mesh(Util.box(Vector3(0.08, size.y - 0.2, 0.18)), c.darkened(0.2), Vector3(size.x / 2.0 * side, 0, z), false))  # ribs
+	box.add_child(Util.mesh(Util.box(Vector3(size.x * 0.95, 0.1, size.z * 0.95)), Color(0.85, 0.88, 0.93), Vector3(0, size.y / 2.0 + 0.05, 0), false))  # snow
+
+
 func _pine(p: Vector3) -> void:
 	var body := StaticBody3D.new()
 	body.collision_layer = Util.LAYER_WORLD
 	body.position = p
 	add_child(body)
-	var height := rng.randf_range(5.0, 8.0)
+	var height := rng.randf_range(6.5, 10.0)
 	var shape := CollisionShape3D.new()
 	var cyl_shape := CylinderShape3D.new()
 	cyl_shape.radius = 0.4
@@ -301,7 +322,7 @@ func _random_spot() -> Vector3:
 	return Vector3.ZERO
 
 
-func _static_box(size: Vector3, pos: Vector3, color: Color) -> StaticBody3D:
+func _static_box(size: Vector3, pos: Vector3, color: Color, visible_mesh := true) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.collision_layer = Util.LAYER_WORLD
 	body.position = pos
@@ -310,7 +331,8 @@ func _static_box(size: Vector3, pos: Vector3, color: Color) -> StaticBody3D:
 	box.size = size
 	shape.shape = box
 	body.add_child(shape)
-	body.add_child(Util.mesh(Util.box(size), color))
+	if visible_mesh:
+		body.add_child(Util.mesh(Util.box(size), color))
 	add_child(body)
 	return body
 
@@ -321,13 +343,14 @@ func _spawn_player() -> void:
 	player.name = "Player"
 	player.position = Vector3(0, 0.1, 0)
 	add_child(player)
-	player.caught_one.connect(_on_caught)
+	player.subdued_one.connect(_on_caught)
+	player.died.connect(_on_died)
 
 
-func _spawn_gatherers() -> void:
-	for spot in GATHERER_SPOTS:
+func _spawn_soldiers() -> void:
+	for spot in SOLDIER_SPOTS:
 		var g := CharacterBody3D.new()
-		g.set_script(GathererScript)
+		g.set_script(SoldierScript)
 		g.position = spot + Vector3(0, 0.1, 0)
 		add_child(g)
 
@@ -350,6 +373,27 @@ func _build_hud() -> void:
 	mode_label.add_theme_color_override("font_outline_color", Color.BLACK)
 	layer.add_child(mode_label)
 
+
+	var armor_text := Label.new()
+	armor_text.text = "ARMOR"
+	armor_text.position = Vector2(24, 100)
+	armor_text.add_theme_font_size_override("font_size", 20)
+	armor_text.add_theme_constant_override("outline_size", 6)
+	armor_text.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(armor_text)
+	armor_bar = ProgressBar.new()
+	armor_bar.max_value = player.MAX_HP
+	armor_bar.value = player.MAX_HP
+	armor_bar.show_percentage = false
+	armor_bar.position = Vector2(110, 104)
+	armor_bar.size = Vector2(220, 20)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.85, 0.75, 0.3)
+	armor_bar.add_theme_stylebox_override("fill", fill)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0, 0, 0, 0.6)
+	armor_bar.add_theme_stylebox_override("background", bg)
+	layer.add_child(armor_bar)
 
 	alert_label = Label.new()
 	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -377,7 +421,7 @@ func _build_hud() -> void:
 
 	hint_label = Label.new()
 	var hint := hint_label
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Crouch: L1/L2  Grab: R1/R2  Light: Y  Look: R-stick  Style: Select  Restart: Start"
+	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Punch: X  Crouch: L1/L2  Grab: R1/R2  Lamp: Y  Look: R-stick  Restart: Start"
 	hint.anchor_top = 1.0
 	hint.anchor_bottom = 1.0
 	hint.offset_top = -44
@@ -400,17 +444,25 @@ func _build_hud() -> void:
 	_update_hud()
 
 
-## Spotted robots just run (Ape Escape style). The top banner is only used for the headlock.
+## Top banner: the hold prompt, or COMBAT while any soldier is fighting you.
 func _update_alert() -> void:
-	# Headlock prompt and wind-down meter
-	var held: bool = player != null and player.holding != null
-	if hold_bar:
-		hold_bar.visible = held
+	if player == null or alert_label == null:
+		return
+	armor_bar.value = player.hp
+	var held: bool = player.holding != null
+	hold_bar.visible = held
+	var fighting := false
+	for s in get_tree().get_nodes_in_group("soldiers"):
+		if s.is_fighting():
+			fighting = true
 	if held:
-		alert_label.text = "Tap GRAB to wind him down!"
+		alert_label.text = "Tap GRAB to put him out!"
 		alert_label.modulate = Color(1, 0.8, 0.3)
 		hold_bar.value = player.hold_progress
-	elif alert_label:
+	elif fighting and not player.dead:
+		alert_label.text = "! COMBAT !"
+		alert_label.modulate = Color(1, 0.25, 0.2) if Time.get_ticks_msec() % 600 < 400 else Color(1, 0.6, 0.5)
+	else:
 		alert_label.text = ""
 
 
@@ -419,11 +471,18 @@ func _on_caught() -> void:
 	_update_hud()
 
 
+func _on_died() -> void:
+	game_over = true
+	message_label.text = "MECH DOWN\nPress Start to try again"
+	message_label.modulate = Color(1, 0.4, 0.3)
+
+
 func _update_hud() -> void:
-	var total := GATHERER_SPOTS.size()
-	count_label.text = "Caught: %d / %d" % [caught, total]
+	var total := SOLDIER_SPOTS.size()
+	count_label.text = "Soldiers down: %d / %d" % [caught, total]
 	if caught >= total:
 		game_over = true
-		message_label.text = "Every robot monkey caught!\nPress Start to play again"
-	else:
+		message_label.text = "Patrol cleared!\nPress Start to play again"
+		message_label.modulate = Color.WHITE
+	elif not game_over:
 		message_label.text = ""

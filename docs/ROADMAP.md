@@ -1,4 +1,4 @@
-# Caveman Catchers: Roadmap
+# Roadmap (working title: Caveman Catchers)
 
 The rule for this project: **prove it's fun before making it big.** Each phase ends with something playable and a gut check: "Do I actually want to keep playing this?" If the answer is no, we fix the fun before moving on, not after.
 
@@ -27,7 +27,22 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 6: PS1 horror direction (current)
+## Prototype 7: PSX mechs (current)
+
+- [x] New direction: a lanky scout mech sneaking up on soldiers. Get caught and you have to fight
+- [x] Heavy PSX rendering: custom surface shader with vertex snapping and affine texture warping on everything, ground cut into 2 m tiles, screen down to 200 lines with stronger dithering and color banding
+- [x] Lanky reverse-jointed mech (~2.7 m) with long arms, big fists, red sensor slit and head lamp. Heavy stomping walk, camera pulled back
+- [x] Lanky soldiers (~1.9 m): winter camo, gas mask, helmet lamp shows mood, shock baton
+- [x] Stealth takedown: lift by the collar, tap GRAB to put him out. Downed soldiers stay down
+- [x] Brawl: telegraphed baton swings, PUNCH staggers, GRAB a staggered soldier to throw him, 6 armor, MECH DOWN game over, COMBAT banner
+- [x] Mech-sized cover: bigger rocks, rusted shipping containers, taller pines
+- [x] Head lamp starts off; quieter vision cones; faint fill light so the mech reads in the dark
+- [ ] Play it on the Thor and phone: is sneaking satisfying? Is the brawl fun or just a punishment? Are swings fair to dodge?
+- [ ] Sound pass (biggest missing piece)
+- [ ] Soldiers noticing knocked-out buddies
+- [ ] Enemy mechs
+
+## Prototype 6: PS1 horror direction
 
 - [x] Night in snowy woods: dark fog, falling snow, snowy pines and rocks, warm lamp posts with pools of light, weak moonlight
 - [x] Flashlight with real stealth tradeoff: on = you can see, robots spot you from full range; off = half range. Lamplight lights you up

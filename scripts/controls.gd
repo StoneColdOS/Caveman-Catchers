@@ -6,9 +6,9 @@ extends RefCounted
 ##   Camera     right stick / arrow keys
 ##   Jump       A (bottom)  / Space
 ##   Crouch     L1 or L2    / Shift or C
-##   Grab       R1 or R2    / J or E   (stuff a robot in the satchel)
-##   Flashlight Y (top)     / F   (on: you can see, but robots spot you from farther)
-##   Art style  Select      / T   (rubber hose on/off)
+##   Grab       R1 or R2    / J or E   (hold a soldier and tap to put him out; throw a staggered one)
+##   Punch      X (left)    / K or Q
+##   Head lamp  Y (top)     / F   (on: you can see, but soldiers spot you from farther)
 ##   Restart    Start       / Enter
 
 
@@ -54,9 +54,10 @@ static func setup() -> void:
 	_key("light", KEY_F)
 	_button("light", JOY_BUTTON_Y)
 
-	_action("style")
-	_key("style", KEY_T)
-	_button("style", JOY_BUTTON_BACK)
+	_action("punch")
+	_key("punch", KEY_K)
+	_key("punch", KEY_Q)
+	_button("punch", JOY_BUTTON_X)
 
 	_action("restart")
 	_key("restart", KEY_ENTER)

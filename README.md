@@ -1,24 +1,21 @@
-# Caveman Catchers
+# Caveman Catchers (working title)
 
-*Catch those damn dirty humans.*
+A PSX-style stealth brawler: you pilot a lanky scout mech through snowy woods at night, sneaking up on enemy soldiers and putting them out quietly. Get spotted and it turns into a fistfight.
 
-A PS1-style survival-horror stealth game: an old night watchman hunts escaped wind-up cymbal monkeys through snowy woods at night, sneaking up with his flashlight off, grabbing them, and winding them down. Ape Escape catching meets Metal Gear Solid stealth.
-
-Built in Godot 4.7, targeting the AYN Thor handheld.
+Built in Godot 4.7, targeting the AYN Thor handheld and phones.
 
 - [Design doc](docs/DESIGN.md): what we've decided and what's still open
 - [Roadmap](docs/ROADMAP.md): build order, one playable step at a time
 
-![Prototype 1](docs/screenshots/prototype1.png)
+![The mech and a soldier](docs/concept/mech-and-soldier.png)
 
-## Current state: Prototype 4
+## Current state: Prototype 7 (mechs)
 
-Placeholder shapes. A grumpy old space chimp hunts five janky robot monkeys and stuffs them in his satchel, in a jungle clearing. Rubber hose animation (STYLE button / Select / T to compare with plain).
-
-- **Green cone:** he's calm and hasn't seen you
-- **Yellow "?":** he sees you and is getting suspicious. Duck out of sight and he'll calm down
-- **Red "!":** he spotted you and runs, panic-hopping. Chase him down and grab him, or let him lose you and he'll calm down
-- Crouching shrinks how far they can see you. Rocks and trees block their view.
+- **Sneak:** light stick tilt is quiet, full tilt stomps loudly, crouch is silent. Head lamp off (the default) and soldiers only see half as far.
+- **Takedown:** creep up behind a soldier, GRAB lifts him, tap GRAB to put him out (4 taps if he never saw you, about 9 if he was wary). Stop tapping and he twists free, angry.
+- **Spotted:** he shouts (nearby soldiers hear it) and comes at you with a shock baton. Every swing is telegraphed: the baton goes up overhead and the tip flashes white.
+- **Brawl:** PUNCH staggers him. GRAB a staggered soldier to throw him. Three punches, or one punch plus a throw, puts him down. You have 6 armor; hit zero and it's MECH DOWN.
+- Green cone = calm, yellow "?" = suspicious, red "!" = fighting. Rocks, containers and trees block their view.
 
 | | Thor / gamepad | Keyboard |
 |---|---|---|
@@ -26,8 +23,10 @@ Placeholder shapes. A grumpy old space chimp hunts five janky robot monkeys and 
 | Camera | Right stick | Arrow keys |
 | Sneak vs run | Light vs full stick tilt | Hold Ctrl to sneak |
 | Jump | A (bottom button) | Space |
+| Punch | X (left button) | K or Q |
 | Crouch | L1 or L2 | Shift or C |
-| Grab into a headlock, then tap to wind them down | R1 or R2 | J or E |
+| Grab / tap to put out / throw | R1 or R2 | J or E |
+| Head lamp | Y (top button) | F |
 | Restart | Start | Enter |
 
 ## Running it
@@ -42,4 +41,4 @@ The yellow text in the top right is a temporary controller readout, so we can se
 
 ## Tests
 
-`godot --headless --path . -s res://tests/test_catch.gd` plays the core loop automatically: gets spotted, sneaks up, grabs a robot, and checks each step.
+`godot --headless --path . -s res://tests/test_catch.gd` plays the core loop automatically: sneak takedown, getting spotted, the brawl, sound, light, and touch controls.

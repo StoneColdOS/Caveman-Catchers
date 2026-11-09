@@ -15,6 +15,7 @@ static var _outline_mat: StandardMaterial3D
 const PIXEL_VARIANTS := 4
 const PIXEL_SCALE := 1.4          # one texture tile covers about 0.7 m, so a pixel is ~4 cm
 static var _pixel_textures: Array = []
+static var _psx_shader: Shader
 
 
 ## Small grayscale-ish noise texture in 2x2 blocks with slight warm/cool tint shifts,
@@ -90,6 +91,18 @@ static func mat(color: Color, unshaded := false) -> StandardMaterial3D:
 	return m
 
 
+## PS1 surface: wobbly snapped vertices and warped (affine) pixel textures.
+static func psx(color: Color) -> ShaderMaterial:
+	if _psx_shader == null:
+		_psx_shader = load("res://shaders/psx_surface.gdshader")
+	var m := ShaderMaterial.new()
+	m.shader = _psx_shader
+	m.set_shader_parameter("albedo", color)
+	m.set_shader_parameter("tex", _pixel_texture(randi() % PIXEL_VARIANTS))
+	m.set_shader_parameter("tex_scale", PIXEL_SCALE)
+	return m
+
+
 static func _outline() -> StandardMaterial3D:
 	if _outline_mat == null:
 		_outline_mat = StandardMaterial3D.new()
@@ -104,7 +117,7 @@ static func mesh(m: Mesh, color: Color, pos := Vector3.ZERO, outline := true) ->
 	var mi := MeshInstance3D.new()
 	m = faceted(m)
 	mi.mesh = m
-	mi.material_override = mat(color)
+	mi.material_override = psx(color) if color.a >= 1.0 else mat(color)
 	mi.position = pos
 	if outline and color.a >= 1.0:
 		var o := MeshInstance3D.new()
