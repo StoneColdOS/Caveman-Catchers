@@ -5,55 +5,66 @@
 
 ## The pitch
 
-Giant humanoid mechs that move and shoot like Syphon Filter, in a destructible PSX Tokyo. Lock on, strafe, roll, and use buildings as cover until they get shot apart. A light stealth layer: sneak into position for a one-shot silent kill, or get spotted and fight.
+Giant cyborg sword fights in a destructible PSX Tokyo. Move like Phantom Pain, fight like Metal Gear Rising, and everything is exaggerated like a Tarantino movie: oil gushes, sparks, slow motion, limbs flying, buildings coming down.
 
 ## Inspirations
 
 | Source | What we take from it |
 |---|---|
-| Syphon Filter (PS1) | Camera behind your back, strafing, combat roll, hold-to-lock aiming that tightens over time |
-| Metal Gear Solid | Sneaking, sound, takedowns from behind |
+| Metal Gear Rising | Blade Mode (time slows, cut along a line you choose), parry, cutting enemies apart, repairing on a finishing cut |
+| MGSV: The Phantom Pain | Movement: walk / jog / sprint, dive out of a sprint, crouch, close over-the-shoulder camera |
+| Tarantino films | Exaggeration: oil gushing in arcs, puddles, slow-motion kills |
 | PS1-era mech games | Lanky low-poly machines, wobbly vertices, warped textures. Vibes only: no names, designs or signature parts from real franchises |
 
 ## Locked decisions
 
-- **Name:** Mech Mania (renamed from Caveman Catchers, Nov 9 2026)
-- **Look:** heavy, over-emphasized PSX. Vertex snapping and affine texture warping on every surface, 200-line screen with dithering and color banding, pixel textures, faceted low-poly. Lanky proportions everywhere
-- **Scale:** mechs are about 10 m. Shops and houses come up to the chest, offices are head height, and a few apartment towers loom over you
-- **Bodies:** humanoid mechs (decided Nov 9 2026): forward knees, broad chest, neck, visor helmet, shoulder armor, backpack thrusters, a rifle in both hands. Still lanky. The bird-legged sword mechs were dropped
-- **Hero mech:** khaki-grey with rusty orange trim, red visor slit, antenna
-- **Enemy mechs:** crimson lacquer with gold trim, horned shoulders, a crest, and a visor bar showing mood (cyan calm, amber suspicious, red fighting)
-- **Map:** a small night-time Tokyo neighborhood, 3×3 blocks around a central plaza. Neon signs, lit windows, vending machines, power poles, street lamps and parked cars. Tall indestructible towers ring the edge
-- **Destruction:** props fly when touched or shot. Buildings take hits (6 to 30 depending on size) and then collapse into chunks and rubble, so cover wears away. Rolling into a building up to 13 m tall smashes through it. Collapses are loud (80 m)
-- **Movement (Syphon Filter, from the user's reference clip, smoothed after playtest):** you run where you push. Speed ramps smoothly (22 m/s² up, 30 down) from a 7 m/s jog on a light push to a 13 m/s sprint on a full push. The run cycle derives stride length from speed so feet don't slide, the body bobs once per footfall, shoulders counter-rotate the hips, and the mech banks into turns. The camera sits centered behind and swings in as you turn. WALK (L3) is quiet at 4.5 m/s. L2/R2 sidestep. B rolls while moving (bullets pass through) and crouches when standing. A jumps. The mechs get less vertex jitter than the city so moving bodies stay smooth
-- **Lock-on (R1), full body:** grabs the best target in front within 110 m with a clear line. You run and gun freely while the upper body tracks him. The right stick slides an aim dot from center mass toward his head (up), gun arm (sideways) or leg (down); full deflection lands right on the part, and the HUD names the part under the dot. Bullets hit whatever part they actually land on. The lock settles over about 1.1 s standing still, slower while you move and much slower while he moves, and his dodge rolls shake it. Spread goes from 4.5 m down to 0.35 m. Full lock does 4 damage instead of 2
-- **Body parts:** HEAD takes triple damage, and losing its 8 HP takes the head off and kills. ARM has 8 HP, then the gun arm comes off and he's disarmed. LEG has 10 HP, then the leg comes off at the knee and he moves at a third of the speed. Limbs pass half their damage to the body, and pieces fly off as physics debris
-- **Enemy evasion:** when you're locked on, they jink at full run speed and switch direction every 0.7 to 1.5 s. When your lock passes about 55% or you open fire, they dodge-roll sideways (every 2.2 to 4 s at most)
-- **Thumb conflict fix (playtest):** you couldn't hold the aim and press fire with the same thumb. Fire moved to R2 (X still works) so the right thumb stays on the aim stick; L2 is a dodge roll; the sidestep buttons are gone (the left stick strafes while locked). On a phone, while locked, HEAD / ARM / LEG / BODY buttons appear: tapping one makes the aim stick to that part, so the thumb is free to fire. Number keys 1-4 do the same on keyboard
-- **No sound rings or alert banners** (removed after playtest). Hit feedback stays
-- **Manual aim (L1):** tight over-the-shoulder crosshair, walking pace, 4-damage shots that land exactly on the crosshair; whichever part the bullet hits takes the damage
-- **Silent kill:** a full-lock shot on an enemy who isn't fighting you kills instantly
-- **Enemy combat:** holds 22 to 48 m, strafes, and before every 3-round burst puts a red laser sight on you for 0.75 s. His accuracy drops the faster you move, and rolling dodges entirely. A shout when he spots you alerts others within 80 m. Lose him for 6 s and he goes back to searching
-- **Armor:** you have 20, enemies 16, and enemy bullets do 1 each
-- **Disarmed enemies** charge and slam you (3 damage). The visor flashes white for 0.7 s before the swing
-- **Clarity:** tracers, muzzle flash, sparks on hits, a hit marker on the reticle, enemy health bars once hurt, a red screen flash when you're hit, and text for CRITICAL / MECH DOWN / SILENT KILL
-- **Platforms:** AYN Thor (APK) and iPhone (web). Engine: Godot 4.7
+- **Name:** Mech Mania
+- **Look:** heavy PSX on the world (vertex snapping, affine textures, 200-line dithered screen). The mechs get less jitter so moving bodies stay smooth. Night Tokyo, 3x3 blocks, neon, lit windows, hazy skyline
+- **Scale:** mechs about 10 m; shops reach the chest, towers loom over you
+- **Hero:** khaki-grey humanoid mech with rusty orange trim, red visor slit, antenna and a trailing head cable, katana
+- **Enemies:**
+  - Gunners: crimson with gold trim, horned shoulders, rifle
+  - Swordsmen: gunmetal with red trim, katana
+  - Visors: cyan calm, amber suspicious, red fighting, blue flashing weakened, white flash about to strike
+- **Movement (Phantom Pain):** a light push walks (2.5 to 4 m/s), a full push jogs (9), holding SPRINT runs at 16 with a heavy lean, wider FOV and momentum. B: crouch when standing, roll when moving, dive when sprinting (launch at 24 m/s, slide to a stop, untouchable). The camera sits close over the right shoulder
+- **Sword:**
+  - Quick slash: 2 damage, a 3-hit combo along different lines
+  - Heavy: 4 damage, breaks guard, longer windup
+  - Guard: blocks slashes from the front and deflects bullets
+  - Parry: guard within 0.25 s of a slash landing; the attacker staggers 1.2 s and is exposed for 2.5 s
+  - Hits stagger and knock back, with hit-stop, sparks and oil
+  - A normal-slash kill takes off the upper body or the head
+- **Blade Mode (hold L2):** time scale 0.12 (you move at real speed). The cut line sits on the nearest enemy within 18 m. The right stick sets its angle and the left stick slides it (up to 4.5 m). Flick the stick or press X to cut.
+  - The line severs every part it passes within reach of: head, either arm, either leg. A roughly horizontal line through the waist, or a vertical line down the chest, cuts the mech in half
+  - Head and torso cuts only work when the enemy is weakened (half armor or less) or exposed. Otherwise the armor holds (3 damage, sparks) and only limbs come off
+  - Each cut costs 12 energy, and Blade Mode drains 18 per second. Hits give 8 (12 for a heavy), parries 25, and energy regenerates slowly
+  - A finishing cut through the head or torso repairs 8 armor and refills energy
+  - The line also cuts buildings and props along it
+- **Dismemberment:** the real pieces break off as physics debris; stumps gush oil in pulses. An arm off means the weapon is gone and the mech brawls (a telegraphed slam). One leg off means a limp; two means stuck. The head or upper body off means dead
+- **Oil:** black and dirty amber gouts arcing out of every wound, landing as puddles that stay on the street (up to 70)
+- **Enemy AI:**
+  - Gunners hold 20 to 48 m, back off if you close in, and laser-sight you for 0.75 s before each 3-round burst
+  - Swordsmen hold about 8 m and circle. Their windups are 3.6x yours (about 0.36 s light, 1.2 s heavy) with a white visor flash. They guard about 45% of your swings, and a heavy breaks it. They counter quickly after blocking
+- **Stealth:** a slash from behind on an unaware enemy exposes him (he's wide open to a Blade Mode finisher)
+- **Armor:** you 30, enemies 16
+- **Destruction:** slashes and Blade Mode lines cut buildings down; sprinting, rolling or diving into low buildings smashes through them; props fly
+- **Platforms:** AYN Thor (APK) and iPhone (web). On touch, Blade Mode is a toggle and you swipe to cut
 
 ## Previous directions (dropped)
 
-Caveman catching, space chimp vs robot monkeys, PS1 horror watchman vs cymbal monkeys, then a human-sized scout mech punching soldiers (punching felt mushy, stealth was slow, soldiers were no match, movement felt bad), then giant bird-legged mechs with Bushido Blade swords (too slow, stances confusing, hard to tell what hit, the camera fought you). Now humanoid mechs with Syphon Filter gunplay.
+Caveman catching, space chimp vs robot monkeys, PS1 horror watchman vs cymbal monkeys, a human-size mech punching soldiers, bird-legged mechs with Bushido Blade stance swords (too slow, confusing stances, unclear hits, the camera fought you), and Syphon Filter-style humanoid gunplay with lock-on part targeting (the user wanted more exaggeration, swords on the right stick, and a closer camera).
 
 ## Ideas parked for later
 
-- A melee finisher or kick up close
-- Weapon pickups: shotgun, missile pod (big destruction), sniper
-- Sound pass: heavy stomps, servo whine, rifle cracks, crumbling concrete
-- Rain on the streets, neon reflections
-- Enemy variants: a heavy that soaks damage, a fast flanker
+- Sound pass: blade ring, clangs, servo whine, oil splatter, heavy stomps
+- Ninja-run style parkour over cars and low roofs while sprinting
+- Throwing a cut-off arm or weapon
+- Boss mech
+- Rain on the streets, neon reflections in the oil
 
 ## Open questions
 
-1. What's the story: who are you, and why is this neighborhood a battlefield?
-2. Is the silent kill too strong?
-3. Should cover be manual (snap to walls) or just "stand behind a building"?
-4. A full level goal beyond "beat 3 mechs"?
+1. Story: who are you, and why is this neighborhood a battlefield?
+2. Is Blade Mode too strong or too stingy on energy?
+3. Should the camera lock onto a duel target, or stay free?
+4. A level goal beyond "beat 4 mechs"?

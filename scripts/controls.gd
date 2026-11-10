@@ -1,19 +1,18 @@
 extends RefCounted
 ## Sets up controls in code so they work on keyboard and on the Thor's gamepad.
-## Syphon Filter style: hold to aim/lock, tap to fire, roll to dodge.
+## Phantom Pain movement, Rising-style sword.
 ##
-##   Run         left stick  / WASD   (you run where you push; camera swings in behind)
-##   Walk        L3 (hold)   / Ctrl   (quiet)
-##   Camera      right stick / arrow keys
-##   Lock on     R1 (hold)   / K      (run and gun; right stick slides your aim to head / arm / leg)
-##   Manual aim  L1 (hold)   / L      (precise crosshair)
-##   Fire        R2 or X     / J      (R2 keeps your right thumb free to aim)
-##   Sidestep                / Q / E  (while locked, the left stick strafes anyway)
-##   Roll/crouch B or L2     / C      (moving = roll, standing = crouch)
-##   Part pick               / 1-4    (body / head / arm / leg; sticks until you change it)
-##   Jump        A           / Space
-##   Reload      Y           / R
-##   Restart     Start       / Enter
+##   Move          left stick  / WASD   (light push walks, full push jogs)
+##   Sprint        A (hold)    / Shift
+##   Camera        right stick / arrow keys
+##   Quick slash   X or R2     / J      (tap 3x for a combo)
+##   Heavy slash   Y           / K      (breaks guards)
+##   Guard / parry L1          / L      (hold; raise it as a blade lands to parry)
+##   Blade Mode    L2 (hold)   / F      (time slows: right stick tilts the cut line,
+##                                       left stick slides it, flick or X to cut)
+##   Crouch / roll / dive  B   / C      (standing / moving / sprinting)
+##   Walk          L3 (hold)   / Ctrl
+##   Restart       Start       / Enter
 
 
 static func setup() -> void:
@@ -27,44 +26,30 @@ static func setup() -> void:
 	_action("look_up");    _key("look_up", KEY_UP);       _axis("look_up", JOY_AXIS_RIGHT_Y, -1.0)
 	_action("look_down");  _key("look_down", KEY_DOWN);   _axis("look_down", JOY_AXIS_RIGHT_Y, 1.0)
 
-	_action("lock")
-	_key("lock", KEY_K)
-	_button("lock", JOY_BUTTON_RIGHT_SHOULDER)
+	_action("attack")
+	_key("attack", KEY_J)
+	_button("attack", JOY_BUTTON_X)
+	_axis("attack", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
-	_action("aim")
-	_key("aim", KEY_L)
-	_button("aim", JOY_BUTTON_LEFT_SHOULDER)
+	_action("heavy")
+	_key("heavy", KEY_K)
+	_button("heavy", JOY_BUTTON_Y)
 
-	_action("fire")
-	_key("fire", KEY_J)
-	_button("fire", JOY_BUTTON_X)
-	_axis("fire", JOY_AXIS_TRIGGER_RIGHT, 1.0)    # R2: index finger fires, thumb stays on the aim stick
+	_action("guard")
+	_key("guard", KEY_L)
+	_button("guard", JOY_BUTTON_LEFT_SHOULDER)
 
-	_action("strafe_left")
-	_key("strafe_left", KEY_Q)
-	_action("strafe_right")
-	_key("strafe_right", KEY_E)
+	_action("blade")
+	_key("blade", KEY_F)
+	_axis("blade", JOY_AXIS_TRIGGER_LEFT, 1.0)
 
-	# Sticky part picks (phone buttons / number keys): the aim stays on that part
-	for part in ["body", "head", "arm", "leg"]:
-		_action("part_" + part)
-	_key("part_body", KEY_1)
-	_key("part_head", KEY_2)
-	_key("part_arm", KEY_3)
-	_key("part_leg", KEY_4)
+	_action("sprint")
+	_key("sprint", KEY_SHIFT)
+	_button("sprint", JOY_BUTTON_A)
 
 	_action("roll")
 	_key("roll", KEY_C)
 	_button("roll", JOY_BUTTON_B)
-	_axis("roll", JOY_AXIS_TRIGGER_LEFT, 1.0)      # L2: quick dodge
-
-	_action("jump")
-	_key("jump", KEY_SPACE)
-	_button("jump", JOY_BUTTON_A)
-
-	_action("reload")
-	_key("reload", KEY_R)
-	_button("reload", JOY_BUTTON_Y)
 
 	_action("walk")
 	_key("walk", KEY_CTRL)

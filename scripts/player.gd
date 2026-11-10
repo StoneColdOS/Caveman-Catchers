@@ -1,73 +1,67 @@
 extends "res://scripts/fighter.gd"
-## Your mech, with a full Syphon Filter movement system at 10 m tall:
-##   RUN       Push the stick and you run where you push: a smooth cycle that ramps
-##             from a jog into a full sprint the further you push. The camera swings
-##             in behind you on its own. Hold WALK to sneak (quiet, slow).
-##   SIDESTEP  L2 / R2 strafe left and right without turning.
-##   LOCK      Hold R1 to lock onto the whole body of the enemy in front. You keep
-##             running anywhere (run and gun) while your upper body stays on him.
-##             The right stick moves your aim point over his body; the part under
-##             the dot is what you hit (let go = center mass):
-##               up = HEAD (triple damage, can come off), sideways = ARM (shoot the
-##               gun arm off to disarm him), down = LEG (shoot it off: he crawls)
-##             The brackets close in white -> yellow -> red. Enemies that strafe and
-##             roll are much harder to settle on. A full lock does double damage.
-##             A full-lock shot on an enemy who hasn't noticed you is a silent kill.
-##   AIM       Hold L1 for manual aim: tight over-the-shoulder crosshair, right stick
-##             aims, you walk. Shots hit exactly where the crosshair is (headshots!).
-##   ROLL      B while moving: combat roll, bullets pass through you.
-##             B standing still: crouch. JUMP with A.
+## Your mech: a 10 m cyborg swordsman. Moves like Phantom Pain, fights like Rising.
+##
+## MOVE    Light push walks, full push jogs. Hold SPRINT to run flat out, leaning hard.
+##         B: crouch (standing), dodge roll (moving), dive (sprinting: launch flat out
+##         and slide). Close over-the-shoulder camera on the right stick.
+## FIGHT   X / R2: quick slashes, chain three for a combo.  Y: heavy slash, breaks guards.
+##         L1: guard (blocks slashes, deflects bullets). Raise it just as a blade
+##         lands to PARRY: the attacker reels, wide open.
+## BLADE   Hold L2: time nearly stops, the camera tightens, and a cut line appears
+## MODE    across the nearest enemy. Right stick tilts the line, left stick slides it.
+##         Flick the right stick (or press X) to cut: everything the line crosses
+##         comes off. Heads and torsos only give once he's weakened or parried.
+##         Runs on blade energy: earn it by landing hits and parries.
+##         A finishing cut through head or torso repairs your armor.
 
-const RUN_SPEED := 13.0           # full sprint
-const JOG_SPEED := 7.0            # light push
-const WALK_SPEED := 4.5
+const WALK_SPEED := 4.0
+const JOG_SPEED := 9.0
+const SPRINT_SPEED := 16.0
 const CROUCH_SPEED := 3.0
-const STRAFE_SPEED := 9.0
-const LOCK_RUN_SPEED := 11.0
-const AIM_WALK_SPEED := 3.5
-const ACCEL := 22.0                # smooth ramp up into a sprint
-const DECEL := 30.0
-const TURN_SPEED := 7.0           # how fast the mech swings to face where you run
-const LOOK_SPEED := 2.4
-const AIM_LOOK_SPEED := 1.2
-const FOLLOW_SPEED := 4.5         # camera swinging back in behind you
-const MAX_HP := 20
-const LOCK_RANGE := 110.0
-const LOCK_CONE := 0.4
-const LOCK_TIME := 1.1             # seconds to settle on a target standing still
-const FIRE_RATE := 0.16
-const DAMAGE := 2
-const FULL_LOCK_DAMAGE := 4
-const SILENT_KILL := 99
-
-const WALK_NOISE := 18.0
-const RUN_NOISE := 50.0
-const LAND_NOISE := 45.0
+const ACCEL := 26.0
+const DECEL := 34.0
+const TURN_SPEED := 9.0
+const LOOK_SPEED := 2.5
+const DIVE_TIME := 0.85
+const DIVE_SPEED := 24.0
+const MAX_HP := 30
+const MAX_ENERGY := 100.0
+const BLADE_DRAIN := 18.0         # per real second in Blade Mode
+const CUT_COST := 12.0
+const CUT_RANGE := 20.0
+const TARGET_RANGE := 18.0
+const COMBO_ANGLES := [PI * 0.95, 0.2, -PI / 2.0]   # right-to-left, left-to-right rising, overhead chop
+const HEAVY_ANGLE := -PI / 2.0 - 0.6
+const WALK_NOISE := 15.0
+const RUN_NOISE := 40.0
+const SPRINT_NOISE := 60.0
 
 var move_mode := "Standing"
 var yaw := 0.0
-var pitch := -0.15
+var pitch := -0.16
 var camera_pivot: Node3D
 var arm: SpringArm3D
 var camera: Camera3D
-var locking := false              # holding R1
-var manual := false               # holding L1
-var target: Node = null
-var part := "body"                # part under the aim dot (for the HUD)
-var aim_offset := Vector2.ZERO    # right stick / touch drag, -1..1
-var touch_aim := Vector2.ZERO
-var sticky_aim := Vector2.ZERO    # set by the part buttons; stays until changed
-const PART_AIM := {"body": Vector2.ZERO, "head": Vector2(0, -1), "arm": Vector2(1, 0), "leg": Vector2(0, 1)}
-var lock := 0.0                   # 0..1, how settled your aim is
-var fire_cd := 0.0
-var fired_t := 0.0                # time since your last shot (enemies dodge when you open up)
-var look_idle := 0.0
 var shake := 0.0
 var hurt := 0.0
 var hit_marker := 0.0
-var last_result := ""
-var was_on_floor := true
-var air_time := 0.0
+var energy := MAX_ENERGY
+var sprinting := false
+var combo := 0
+var combo_window := 0.0
+var queued_attack := ""
+# Blade Mode
+var blade_on := false
+var blade_target: Node = null
+var cut_angle := 0.0              # angle of the cut line on screen (0 = horizontal)
+var cut_offset := Vector2.ZERO    # where the line sits on his body (meters)
+var _flick_peak := 0.0
+var _flick_t := 0.0
+var _flick_angle := 0.0
+var cut_cd := 0.0
+var cuts_made := 0
+var touch_cut_angle := 0.0
+var touch_cutting := false
 
 
 func _ready() -> void:
@@ -75,322 +69,389 @@ func _ready() -> void:
 	add_to_group("shakers")
 	collision_layer = Util.LAYER_PLAYER
 	collision_mask = Util.LAYER_WORLD | Util.LAYER_ENEMY
-	_setup_mech(false, MAX_HP)
+	_setup_mech(false, MAX_HP, "katana")
 	_build_camera()
 
 
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
-	camera_pivot.position.y = 9.5
+	camera_pivot.position.y = 10.6
 	add_child(camera_pivot)
 	arm = SpringArm3D.new()
-	arm.spring_length = 16.0
-	arm.position = Vector3(0.0, 1.0, 0)
+	arm.spring_length = 12.0
+	arm.position = Vector3(5.0, 0.4, 0)        # over the right shoulder, right in the action
 	arm.collision_mask = Util.LAYER_WORLD
 	arm.margin = 0.5
 	arm.add_excluded_object(get_rid())
 	camera_pivot.add_child(arm)
 	camera = Camera3D.new()
-	camera.fov = 66.0
+	camera.fov = 68.0
 	camera.far = 400.0
 	arm.add_child(camera)
 	camera.make_current()
 	var fill := OmniLight3D.new()
 	fill.light_color = Color(0.6, 0.7, 1.0)
 	fill.light_energy = 1.4
-	fill.omni_range = 30.0
+	fill.omni_range = 25.0
 	fill.omni_attenuation = 1.0
 	fill.light_specular = 0.0
 	camera.add_child(fill)
 
 
-func is_aiming() -> bool:
-	return (target != null or manual) and not dead and roll_t <= 0.0
+func opponents() -> Array:
+	return get_tree().get_nodes_in_group("enemies")
 
 
 func is_running() -> bool:
-	return move_mode.begins_with("Running")
+	return move_mode.begins_with("Jogging") or move_mode.begins_with("Sprinting")
 
 
-func aim_direction() -> Vector3:
-	return (aim_point() - center()).normalized()
+func is_sprinting() -> bool:
+	return sprinting and move_mode.begins_with("Sprinting")
 
 
-## Where your shots go: the aim dot on the locked enemy, or down the crosshair.
-func aim_point() -> Vector3:
-	if target and is_instance_valid(target) and not target.dead:
-		return lock_point()
-	var from := camera.global_position
-	var fwd := -camera.global_basis.z
-	var q := PhysicsRayQueryParameters3D.create(from + fwd * 12.0, from + fwd * SHOT_RANGE, Util.LAYER_WORLD | Util.LAYER_ENEMY)
-	q.exclude = [get_rid()]
-	var hit := get_world_3d().direct_space_state.intersect_ray(q)
-	return hit.position if not hit.is_empty() else from + fwd * SHOT_RANGE
-
-
-## The aim dot: center mass, slid toward his head (up), gun arm (sideways) or
-## leg (down) by the right stick. Full deflection lands right on the part.
-func lock_point() -> Vector3:
-	var c: Vector3 = target.center()
-	var rig_t = target.rig
-	var p := c
-	p += (rig_t.part_point("head") - c) * maxf(0.0, -aim_offset.y)
-	p += (rig_t.part_point("leg") - c) * maxf(0.0, aim_offset.y)
-	p += (rig_t.part_point("arm") - c) * absf(aim_offset.x)
-	return p
+func in_blade_mode() -> bool:
+	return blade_on
 
 
 func add_shake(amount: float) -> void:
-	shake = minf(1.5, shake + amount)
+	shake = minf(1.6, shake + amount)
 
 
 func _physics_process(delta: float) -> void:
+	# Blade Mode slows the world; you keep moving at real speed
+	var rdelta := delta / maxf(Engine.time_scale, 0.01) if blade_on else delta
+	rdelta = minf(rdelta, 0.05)
 	var input := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
+	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
 	if dead:
 		input = Vector2.ZERO
-	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
-	if not dead:
-		_input_actions(delta, input, look)
-	_update_target(delta)
-
-	# --- Camera
-	if target and not dead:
-		var to: Vector3 = target.global_position - global_position
-		yaw = lerp_angle(yaw, atan2(-to.x, -to.z) + 0.25, clampf(6.0 * delta, 0.0, 1.0))
-		pitch = lerp(pitch, -0.14, clampf(3.0 * delta, 0.0, 1.0))
-	elif manual:
-		yaw -= look.x * AIM_LOOK_SPEED * delta
-		pitch = clamp(pitch - look.y * AIM_LOOK_SPEED * delta, -0.7, 0.45)
+		_exit_blade_mode()
 	else:
-		yaw -= look.x * LOOK_SPEED * delta
-		pitch = clamp(pitch - look.y * LOOK_SPEED * delta, -0.9, 0.35)
-		look_idle = 0.0 if look.length() > 0.2 else look_idle + delta
-		# Classic Syphon Filter camera: glued behind your back, swinging round as you turn
-		if look_idle > 0.6 and (input.length() > 0.2 or look_idle > 2.0):
-			yaw = lerp_angle(yaw, rig.rotation.y + PI, clampf(FOLLOW_SPEED * delta, 0.0, 1.0))
-			pitch = lerp(pitch, -0.16, clampf(2.0 * delta, 0.0, 1.0))
+		_combat_input(rdelta, input, look)
+
+	# --- Camera: close over the shoulder; wider and pulled back at a sprint
+	if not blade_on:
+		yaw -= look.x * LOOK_SPEED * rdelta
+		pitch = clamp(pitch - look.y * LOOK_SPEED * rdelta, -0.9, 0.4)
+	elif is_instance_valid(blade_target):
+		var to: Vector3 = blade_target.global_position - global_position
+		yaw = lerp_angle(yaw, atan2(-to.x, -to.z), clampf(8.0 * rdelta, 0.0, 1.0))
+		pitch = lerp(pitch, -0.05, clampf(6.0 * rdelta, 0.0, 1.0))
 	camera_pivot.rotation = Vector3(pitch, yaw, 0)
-	var kc := clampf(6.0 * delta, 0.0, 1.0)
-	arm.spring_length = lerp(arm.spring_length, 9.0 if manual else (14.0 if target else 16.0), kc)
-	arm.position.x = lerp(arm.position.x, 4.2 if manual else (4.0 if target else 0.0), kc)   # centered behind you, like the original
-	camera_pivot.position.y = lerp(camera_pivot.position.y, 10.5 if manual else 9.5, kc)
-	camera.fov = lerp(camera.fov, 50.0 if manual else 66.0, kc)
-	shake = maxf(0.0, shake - delta * 2.5)
+	var kc := clampf(6.0 * rdelta, 0.0, 1.0)
+	var sprint_view := is_sprinting()
+	arm.spring_length = lerp(arm.spring_length, 9.0 if blade_on else (15.0 if sprint_view else 12.0), kc)
+	arm.position.x = lerp(arm.position.x, 5.5 if blade_on else 5.0, kc)
+	camera.fov = lerp(camera.fov, 55.0 if blade_on else (78.0 if sprint_view else 68.0), kc)
+	shake = maxf(0.0, shake - rdelta * 2.5)
 	camera.h_offset = randf_range(-1, 1) * shake * 0.5
 	camera.v_offset = randf_range(-1, 1) * shake * 0.5
-	hurt = maxf(0.0, hurt - delta * 2.0)
-	hit_marker = maxf(0.0, hit_marker - delta)
+	hurt = maxf(0.0, hurt - rdelta * 2.0)
+	hit_marker = maxf(0.0, hit_marker - rdelta)
 
 	# --- Movement
 	var dir := Vector3.ZERO
-	if input.length() > 0.2:
+	var tilt := input.length()
+	if tilt > 0.15:
 		dir = (Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y)).normalized()
-	var strafe := Input.get_axis("strafe_left", "strafe_right") if not dead else 0.0
-	var face_fwd := facing()
-	var face_right := Vector3.UP.cross(face_fwd).normalized() * -1.0
 	var want_v := Vector3.ZERO
 	var noise := 0.0
+	sprinting = Input.is_action_pressed("sprint") and not crouching and legs_lost() == 0
 	if dead:
 		move_mode = "WRECKED"
+	elif blade_on:
+		move_mode = "BLADE MODE"
+	elif dive_t > 0.0:
+		move_mode = "Diving"
+		var u := 1.0 - dive_t / DIVE_TIME
+		want_v = roll_dir * DIVE_SPEED * clampf(1.2 - u * 1.3, 0.0, 1.0)   # launch, then slide to a stop
 	elif roll_t > 0.0:
 		move_mode = "Rolling"
 		want_v = roll_dir * ROLL_SPEED
-	else:
+	elif swing != 0 or stagger > 0.0:
+		move_mode = "Fighting"
+		if swing == 2:
+			want_v = facing() * (14.0 if swing_kind == "heavy" else 9.0)   # step into the cut
+	elif dir != Vector3.ZERO:
 		var speed := 0.0
-		if dir != Vector3.ZERO:
-			if crouching:
-				speed = CROUCH_SPEED
-				move_mode = "Crouch-walking (silent)"
-			elif manual:
-				speed = AIM_WALK_SPEED
-				noise = WALK_NOISE
-				move_mode = "Aiming"
-			elif Input.is_action_pressed("walk"):
-				speed = WALK_SPEED
-				noise = WALK_NOISE
-				move_mode = "Walking (quiet)"
-			else:
-				# The further you push, the faster you go: jog -> full sprint
-				var push := smoothstep(0.25, 0.95, input.length())
-				speed = lerpf(JOG_SPEED, LOCK_RUN_SPEED if target else RUN_SPEED, push)
-				noise = RUN_NOISE
-				move_mode = "Running"
+		if crouching:
+			speed = CROUCH_SPEED
+			move_mode = "Crouch-walking"
+		elif guarding:
+			speed = WALK_SPEED
+			move_mode = "Guarding"
+		elif sprinting:
+			speed = SPRINT_SPEED
+			noise = SPRINT_NOISE
+			move_mode = "Sprinting"
+		elif tilt < 0.6 or Input.is_action_pressed("walk"):
+			speed = lerpf(2.5, WALK_SPEED, clampf(tilt / 0.6, 0.0, 1.0))
+			noise = WALK_NOISE
+			move_mode = "Walking"
 		else:
-			move_mode = "Crouching (silent)" if crouching else ("Aiming" if is_aiming() else "Standing")
+			speed = JOG_SPEED
+			noise = RUN_NOISE
+			move_mode = "Jogging"
+		if legs_lost() > 0:
+			speed *= 0.4
 		want_v = dir * speed
-		if absf(strafe) > 0.2 and not crouching:
-			want_v += face_right * strafe * STRAFE_SPEED
-			noise = maxf(noise, WALK_NOISE)
-			if dir == Vector3.ZERO:
-				move_mode = "Sidestepping"
+	else:
+		move_mode = "Crouching" if crouching else ("Guarding" if guarding else "Standing")
 	var speeding_up := Vector2(want_v.x, want_v.z).length() > Vector2(velocity.x, velocity.z).length()
-	var accel := (ACCEL if speeding_up else DECEL) if roll_t <= 0.0 else 400.0
-	if not is_on_floor():
-		accel *= 0.3
-	velocity.x = move_toward(velocity.x, want_v.x, accel * delta)
-	velocity.z = move_toward(velocity.z, want_v.z, accel * delta)
+	var accel := ACCEL if speeding_up else DECEL
+	if roll_t > 0.0 or dive_t > 0.0 or blade_on:
+		accel = 200.0
+	if is_sprinting():
+		accel *= 0.7    # heavy momentum at full tilt
+	velocity.x = move_toward(velocity.x, want_v.x, accel * rdelta)
+	velocity.z = move_toward(velocity.z, want_v.z, accel * rdelta)
 	if is_on_floor() and velocity.y <= 0.0:
 		velocity.y = 0.0
 	else:
-		velocity.y -= GRAVITY * delta
+		velocity.y -= GRAVITY * rdelta
 	var pre := velocity
 	move_and_slide()
-
-	var on_floor := is_on_floor()
-	if on_floor and not was_on_floor and air_time > 0.3:
-		get_tree().call_group("enemies", "hear_noise", global_position, LAND_NOISE, self)
-		add_shake(0.6)
-		if city:
-			city.push_props(global_position, 6.0, Vector3.UP * 8.0)
-	air_time = 0.0 if on_floor else air_time + delta
-	was_on_floor = on_floor
 
 	if city and not dead:
 		for i in get_slide_collision_count():
 			var col := get_slide_collision(i).get_collider()
-			if col and col.is_in_group("breakable") and roll_t > 0.0:
+			if col and col.is_in_group("breakable") and (roll_t > 0.0 or dive_t > 0.0 or is_sprinting()):
 				city.smash(col, global_position, Vector2(pre.x, pre.z).length())
 		city.push_props(global_position, 1.8, pre)
 
-	# --- Facing: toward the lock, down the crosshair, or where you're running
-	if not dead:
-		var face_to := Vector3.ZERO
-		if target:
-			face_to = target.global_position - global_position
-		elif manual:
+	# --- Facing: where you move; snap to the enemy when you cut
+	if not dead and not blade_on and swing == 0 and dive_t <= 0.0 and roll_t <= 0.0:
+		var face_to := dir
+		if guarding:
 			face_to = Basis(Vector3.UP, yaw) * Vector3.FORWARD
-		elif dir != Vector3.ZERO and roll_t <= 0.0:
-			face_to = dir
 		if face_to.length() > 0.1:
-			var turn := TURN_SPEED if target or manual else TURN_SPEED * lerpf(1.2, 0.7, rig.gait)
-			rig.rotation.y = lerp_angle(rig.rotation.y, atan2(face_to.x, face_to.z), clampf(turn * delta, 0.0, 1.0))
+			var turn := TURN_SPEED * (0.55 if is_sprinting() else 1.0)
+			rig.rotation.y = lerp_angle(rig.rotation.y, atan2(face_to.x, face_to.z), clampf(turn * rdelta, 0.0, 1.0))
+	elif blade_on and is_instance_valid(blade_target):
+		var to: Vector3 = blade_target.global_position - global_position
+		rig.rotation.y = lerp_angle(rig.rotation.y, atan2(to.x, to.z), clampf(12.0 * rdelta, 0.0, 1.0))
 
-	_update_mech(delta)
+	dive_t = maxf(0.0, dive_t - rdelta)
+	_update_mech(rdelta)
 	if rig.step_signal > 0.0 and noise > 0.0:
 		get_tree().call_group("enemies", "hear_noise", global_position, noise, self)
-		add_shake(0.06 * rig.gait)
+		add_shake(0.12 if is_sprinting() else 0.04 * rig.gait)
 
 
-func _input_actions(delta: float, input: Vector2, look: Vector2) -> void:
-	locking = Input.is_action_pressed("lock")
-	manual = Input.is_action_pressed("aim") and not locking
-	fire_cd -= delta
-	fired_t += delta
-	if Input.is_action_just_pressed("reload"):
-		start_reload()
-	if Input.is_action_just_pressed("jump") and is_on_floor() and roll_t <= 0.0 and not crouching:
-		velocity.y = JUMP_SPEED * (0.5 if lost_leg else 1.0)
-		get_tree().call_group("enemies", "hear_noise", global_position, 30.0, self)
+func _combat_input(rdelta: float, input: Vector2, look: Vector2) -> void:
+	combo_window -= rdelta
+	cut_cd -= rdelta
+	if not blade_on:
+		energy = minf(MAX_ENERGY, energy + 2.0 * rdelta)
+
+	# Guard (raising it opens the parry window)
+	var g := Input.is_action_pressed("guard") and weapon == "katana" and not disarmed()
+	if g and not guarding and swing == 0 and stagger <= 0.0:
+		guard_t = 0.0
+	guarding = g and swing == 0 and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0 and not blade_on
+
+	# Blade Mode
+	var can_enter := not dead and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0 and (swing == 0 or swing == 3)
+	if Input.is_action_pressed("blade") and not blade_on and energy >= 10.0 and can_enter and not disarmed():
+		_enter_blade_mode()
+	elif blade_on and (not Input.is_action_pressed("blade") or energy <= 0.0 or stagger > 0.0):
+		_exit_blade_mode()
+	if blade_on:
+		_blade_mode_input(rdelta, input, look)
+		return
+
+	# B: crouch / roll / dive
 	if Input.is_action_just_pressed("roll"):
-		var strafe := Input.get_axis("strafe_left", "strafe_right")
-		if input.length() > 0.2:
-			_try_roll(Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y))
-		elif absf(strafe) > 0.2:
-			_try_roll(Vector3.UP.cross(facing()) * -strafe)   # crouch + sidestep = side roll
+		if is_sprinting() and input.length() > 0.2:
+			dive_t = DIVE_TIME
+			roll_dir = facing()
+			swing = 0
+			get_tree().call_group("enemies", "hear_noise", global_position, 35.0, self)
+			add_shake(0.4)
+		elif input.length() > 0.2:
+			start_roll(Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y))
 		else:
 			crouching = not crouching
-	# Locked: the right stick (or touch drag) slides your aim over his body
-	if target:
-		for p in PART_AIM:
-			if Input.is_action_just_pressed("part_" + p):
-				sticky_aim = PART_AIM[p]
-		var want := (sticky_aim if look.length() < 0.25 and touch_aim.length() < 0.05 else look + touch_aim).limit_length(1.0)
-		aim_offset = aim_offset.lerp(want, clampf(12.0 * delta, 0.0, 1.0))
-		part = target._part_at(lock_point()) if target.has_method("_part_at") else "body"
-	else:
-		aim_offset = Vector2.ZERO
-		touch_aim = Vector2.ZERO
-		sticky_aim = Vector2.ZERO
-		part = "body"
-	if Input.is_action_pressed("fire") and fire_cd <= 0.0:
-		fire()
+
+	# Attacks (buffered so combos chain smoothly)
+	if Input.is_action_just_pressed("attack"):
+		queued_attack = "light"
+	if Input.is_action_just_pressed("heavy"):
+		queued_attack = "heavy"
+	if queued_attack != "" and (swing == 0 or swing == 3) and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0:
+		swing = 0
+		_face_nearest()
+		crouching = false
+		if queued_attack == "heavy":
+			start_swing("heavy", HEAVY_ANGLE)
+			combo = 0
+		else:
+			if combo_window <= 0.0:
+				combo = 0
+			start_swing("light", COMBO_ANGLES[combo % COMBO_ANGLES.size()])
+			combo += 1
+			combo_window = 0.7
+		queued_attack = ""
 
 
-func _try_roll(d: Vector3) -> void:
-	if start_roll(d):
-		lock *= 0.3
-		get_tree().call_group("enemies", "hear_noise", global_position, 35.0, self)
+## Snap to face the nearest enemy in front before a swing (soft targeting).
+func _face_nearest() -> void:
+	var t := _nearest_enemy(14.0, -0.2)
+	if t:
+		var to: Vector3 = t.global_position - global_position
+		rig.rotation.y = atan2(to.x, to.z)
 
 
-## R1 locks the best target in front; holding keeps it. The lock tightens over time.
-func _update_target(delta: float) -> void:
-	if target and (not is_instance_valid(target) or target.dead or not locking or dead or not _can_lock(target)):
-		target = null
-	if locking and target == null and not dead:
-		target = _best_target()
-		lock = 0.0
-		aim_offset = Vector2.ZERO
-	if target:
-		# Settling is slow if you're moving, slower if he is, and a dodge roll shakes it
-		var you := 0.6 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
-		var tv: Vector3 = target.velocity
-		var him := 1.0 / (1.0 + Vector2(tv.x, tv.z).length() * 0.3)
-		lock = minf(1.0, lock + delta / LOCK_TIME * you * him)
-		if target.roll_t > 0.0:
-			lock = maxf(0.0, lock - delta * 2.5)
-	else:
-		lock = 0.0
-
-
-func _can_lock(e: Node) -> bool:
-	var d := global_position.distance_to(e.global_position)
-	return d < LOCK_RANGE and (city == null or city.clear_line(center(), e.center()))
-
-
-func _best_target() -> Node:
-	var fwd := -camera.global_basis.z
-	fwd.y = 0.0
-	fwd = fwd.normalized()
+func _nearest_enemy(reach: float, cone: float) -> Node:
+	var cam_fwd := -camera.global_basis.z
+	cam_fwd.y = 0.0
+	cam_fwd = cam_fwd.normalized()
 	var best: Node = null
-	var best_score := LOCK_CONE
-	for e in get_tree().get_nodes_in_group("enemies"):
-		if e.dead or not _can_lock(e):
+	var best_d := reach
+	for e in opponents():
+		if e.dead:
 			continue
 		var to: Vector3 = e.global_position - global_position
 		to.y = 0.0
-		var score := fwd.dot(to.normalized()) - to.length() / LOCK_RANGE * 0.2
-		if score > best_score:
+		var d := to.length()
+		if d < best_d and (d < 6.0 or cam_fwd.dot(to / d) > cone):
 			best = e
-			best_score = score
+			best_d = d
 	return best
 
 
-func fire() -> void:
-	if not can_shoot():
-		if ammo <= 0:
-			start_reload()
+# --- Blade Mode
+
+func _enter_blade_mode() -> void:
+	blade_on = true
+	blade_mode_active = true
+	Engine.time_scale = BLADE_SCALE
+	blade_target = _nearest_enemy(TARGET_RANGE, 0.2)
+	cut_offset = Vector2.ZERO
+	cut_angle = 0.0
+	crouching = false
+	guarding = false
+	swing = 0
+
+
+func _exit_blade_mode() -> void:
+	if not blade_on:
 		return
-	fire_cd = FIRE_RATE
-	fired_t = 0.0
-	var full: bool = target != null and lock >= 0.999
-	var spread := 2.5
-	var dmg := DAMAGE
-	var shot_part := "body"
-	if target:
-		spread = lerp(4.5, 0.35, lock)
-		shot_part = "precise"   # whatever part the bullet actually lands on
-		if full:
-			dmg = FULL_LOCK_DAMAGE
-		if full and target.is_unaware():
-			dmg = SILENT_KILL
-	elif manual:
-		spread = 0.15   # dead on the crosshair
-		dmg = FULL_LOCK_DAMAGE
-		shot_part = "precise"   # the enemy works out which part the bullet hit
-	var victim := shoot_at(aim_point(), spread, dmg, shot_part)
-	lock *= 0.8
-	add_shake(0.08)
-	if victim and victim.has_method("take_shot") and victim != self:
-		hit_marker = 0.2
-		var r: String = victim.last_hit_result
-		if victim.dead:
-			last_result = "silent" if dmg == SILENT_KILL else (r if r == "decap" else "kill")
-		elif r != "":
-			last_result = r
-		elif full:
-			last_result = "crit"
+	blade_on = false
+	blade_mode_active = false
+	Engine.time_scale = 1.0
+	blade_target = null
+
+
+## Right stick tilts the line, left stick slides it; flick or X to cut.
+func _blade_mode_input(rdelta: float, input: Vector2, look: Vector2) -> void:
+	energy = maxf(0.0, energy - BLADE_DRAIN * rdelta)
+	if blade_target and (not is_instance_valid(blade_target) or (blade_target.dead and blade_target.lost.has("upper"))):
+		blade_target = _nearest_enemy(TARGET_RANGE, 0.2)
+	cut_offset += Vector2(input.x, -input.y) * 5.0 * rdelta
+	cut_offset = cut_offset.limit_length(4.5)
+	var mag := look.length()
+	if mag > 0.5:
+		cut_angle = atan2(-look.y, look.x)
+	if touch_cutting:
+		cut_angle = touch_cut_angle
+	# A flick: stick slammed out then let go quickly
+	if mag > 0.85:
+		_flick_peak = mag
+		_flick_t = 0.0
+		_flick_angle = cut_angle
+	else:
+		_flick_t += rdelta
+		if _flick_peak > 0.85 and mag < 0.35 and _flick_t < 0.2:
+			_flick_peak = 0.0
+			blade_cut(_flick_angle)
+	if Input.is_action_just_pressed("attack"):
+		blade_cut(cut_angle)
+
+
+## One Blade Mode cut along the current line.
+func blade_cut(angle: float) -> Array:
+	if not blade_on or cut_cd > 0.0 or energy < 1.0:
+		return []
+	cut_cd = 0.12
+	energy = maxf(0.0, energy - CUT_COST)
+	cuts_made += 1
+	# Animate a real-speed slash along the same line
+	swing = 2
+	swing_kind = "light"
+	swing_angle = angle if fmod(cuts_made, 2) == 0 else angle + PI
+	swing_len = 0.1
+	swing_t = 0.1
+	swing_hit = true
+	_trail_pts.clear()
+	add_shake(0.25)
+	var right := camera.global_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var axes := [right, Vector3.UP]
+	var dir2 := Vector2(cos(angle), sin(angle))
+	var result: Array = []
+	var base: Vector3 = global_position + facing() * 9.0 + Vector3.UP * 6.0
+	if is_instance_valid(blade_target) and not (blade_target.dead and blade_target.lost.has("upper")):
+		base = blade_target.center()
+		if blade_target.global_position.distance_to(global_position) < CUT_RANGE:
+			var was_dead: bool = blade_target.dead
+			result = blade_target.apply_cut(self, cut_offset, dir2, axes)
+			if not result.is_empty() and result[0] != "armor":
+				hit_marker = 0.25
+				energy = minf(MAX_ENERGY, energy + 4.0 * result.size())
+				if not was_dead and blade_target.dead and (result.has("upper") or result.has("head")):
+					hp = mini(MAX_HP, hp + 8)       # finishing cut: repair
+					energy = MAX_ENERGY
+					last_result = "zandatsu"
+				else:
+					last_result = "cut"
+			elif not result.is_empty():
+				last_result = "armor"
+	# Cut through anything else along the line: buildings, props
+	if city:
+		var p0: Vector3 = base + right * cut_offset.x + Vector3.UP * cut_offset.y
+		var dw: Vector3 = right * dir2.x + Vector3.UP * dir2.y
+		for t in range(-8, 9, 2):
+			city.cut(p0 + dw * t, 1.5, global_position)
+	return result
+
+
+## Touch: a swipe on the right side of the screen while in Blade Mode.
+func touch_cut(angle: float) -> void:
+	touch_cutting = false
+	blade_cut(angle)
+
+
+# --- Taking hits
+
+func receive_slash(attacker: Node, kind: String, angle: float) -> String:
+	var r := super.receive_slash(attacker, kind, angle)
+	if r == "parry":
+		energy = minf(MAX_ENERGY, energy + 25.0)
+		last_result = "parry"
+	return r
 
 
 func on_hit_taken(_from: Node, _damage: int) -> void:
 	hurt = 1.0
-	add_shake(0.35)
+	add_shake(0.5)
+	_exit_blade_mode()
+
+
+func die(by: Node) -> void:
+	_exit_blade_mode()
+	super.die(by)
+
+
+## Our hits feed blade energy.
+func note_hit(kind: String) -> void:
+	hit_marker = 0.2
+	energy = minf(MAX_ENERGY, energy + (12.0 if kind == "heavy" else 8.0))
+
+
+func _resolve_slash() -> void:
+	super._resolve_slash()
+	if last_result == "hit" or last_result == "kill" or last_result == "break":
+		note_hit(swing_kind)

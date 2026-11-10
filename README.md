@@ -1,43 +1,46 @@
 # Mech Mania
 
-A PSX-style giant-mech shooter that moves like Syphon Filter. Pilot a lanky 10 m humanoid mech through a small Tokyo neighborhood at night: sneak up and drop enemy mechs with one locked-on shot, or get into running gunfights where you strafe, roll and lock on. The city breaks around you: stray bullets chew buildings until they collapse, props go flying, and rolling into a shop smashes right through it.
+A PSX-style giant-mech sword game. Pilot a lanky 10 m cyborg swordsman through a small night-time Tokyo, moving like Phantom Pain and fighting like Rising: quick slashes, heavies, parries, and Blade Mode, where time stops and you cut enemy mechs apart along any line you choose. Everything is exaggerated on purpose: oil gushes, sparks fly, kills drop into slow motion, buildings come down.
 
 Built in Godot 4.7, for the AYN Thor handheld and phones.
 
 - [Design doc](docs/DESIGN.md): what we've decided and what's still open
 - [Roadmap](docs/ROADMAP.md): build order, one playable step at a time
 
-![Two mechs in a Tokyo street](docs/concept/mech-mania-gunfight.png)
+![Cut in half](docs/concept/mech-mania-cut-in-half.png)
 
-![Running, Syphon Filter style](docs/concept/mech-mania-run.png)
+![Blade Mode](docs/concept/mech-mania-blade-mode.png)
 
 ## How it plays
 
-- **Running:** you run where you push. The cycle is smooth and ramps from a jog (light push) up to a full sprint (full push), banking into turns. The camera sits centered behind you and swings in as you turn. Hold WALK (L3) to sneak.
-- **Lock on (R1), fire (R2):** R1 locks onto the enemy's whole body. While locked, the **right stick slides your aim dot** over him and the part under the dot is what you hit; your index finger fires with R2, so your thumb never leaves the stick. Let go and it's back on center mass. On a phone, HEAD / ARM / LEG / BODY buttons pop up while locked: tap one and the aim sticks to that part.
-  - **Up = HEAD:** triple damage, and the head can come off.
-  - **Sideways = ARM:** shoot the gun arm off and he's disarmed. He charges to slam you instead.
-  - **Down = LEG:** take a leg off at the knee and he crawls.
-- **Settling the lock:** the brackets close in white, then yellow, then red as your aim settles, and a full red lock hits for double. Enemies fight it: they jink side to side when you're on them and dodge-roll when you settle or open fire, which shakes your lock. Moving yourself slows it too.
-- **Manual aim (L1):** a precise crosshair that hits exactly where you point.
-- **Silent kill:** a full-lock shot on an enemy who hasn't noticed you.
-- **Enemies telegraph:** a red laser sight lands on you before every burst. Roll (L2, or B while moving) and bullets pass through you. B standing still crouches; A jumps.
-- **Destruction:** missed shots chew up buildings until they collapse.
+- **Moving (Phantom Pain):** a light push walks, a full push jogs, and holding SPRINT runs flat out with a heavy lean. B crouches when you're standing, rolls when you're moving, and dives when you're sprinting (you launch flat out and slide). Close over-the-shoulder camera.
+- **Quick slash (X / R2):** tap three times for a combo.
+- **Heavy slash (Y):** smashes through a guard.
+- **Guard (L1):** blocks slashes and deflects bullets. Raise it just as a blade lands to **parry**: the attacker reels, wide open.
+- **Blade Mode (hold L2):** time nearly stops and a cut line appears across the nearest enemy. The right stick tilts the line and the left stick slides it. Flick the right stick (or press X) to cut. Whatever the line crosses comes off: head, either arm, either leg, or the whole upper body.
+  - Heads and torsos only give once he's weakened (visor flashing blue) or after a parry. Before that the armor holds and only limbs come off.
+  - A finishing cut through the head or torso repairs your armor.
+  - Blade Mode runs on blade energy, earned by landing hits and parries.
+- **Enemies:**
+  - Gunners (crimson) keep their distance and laser-sight you before every burst. Guard deflects the bullets.
+  - Swordsmen (gunmetal) duel you and telegraph every swing: the visor flashes white.
+  - Take a mech's weapon arm and he charges to slam you instead.
+- **Stealth:** a slash on an enemy who hasn't noticed you, from behind, leaves him wide open.
 
 | | Thor / gamepad | Keyboard |
 |---|---|---|
-| Run | Left stick | WASD |
-| Walk (quiet) | Hold L3 | Hold Ctrl |
+| Move | Left stick | WASD |
+| Sprint | Hold A | Shift |
 | Camera | Right stick | Arrow keys |
-| Lock on (hold) | R1 | K |
-| Aim at head / arm / leg while locked | Right stick (phone: part buttons) | Arrow keys, or 1-4 to stick to a part |
-| Manual aim (hold) | L1 | L |
-| Fire | R2 (or X) | J |
-| Sidestep | (left stick while locked) | Q / E |
-| Roll / crouch | L2 or B | C |
-| Jump | A | Space |
-| Reload | Y | R |
+| Quick slash | X or R2 | J |
+| Heavy slash | Y | K |
+| Guard / parry | L1 | L |
+| Blade Mode | Hold L2 (R-stick angle, L-stick slide, flick or X to cut) | Hold F |
+| Crouch / roll / dive | B | C |
+| Walk | Hold L3 | Ctrl |
 | Restart | Start | Enter |
+
+On a phone, Blade Mode is a toggle button, and you **swipe** on the right side of the screen to cut along your swipe.
 
 ## Running it
 

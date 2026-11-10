@@ -1,13 +1,14 @@
 extends Control
 ## On-screen controls for phones.
-##   Left side:  floating joystick. Light push sneaks, full push runs.
-##   Right side: drag anywhere empty to look around.
-##   Buttons:    Fire, Lock (toggle), Roll/Crouch, Jump, Reload.
-##   While locked on, HEAD / ARM / LEG / BODY buttons appear: tap one and your aim
-##   sticks to that part, so the same thumb can then hit FIRE.
+##   Left side:  floating joystick (light push walks, full push jogs).
+##   Right side: drag to turn the camera. In BLADE MODE, swipe instead: the cut goes
+##               along your swipe (the line previews while your finger is down).
+##   Buttons:    Slash, Heavy, Guard (hold; tap right as a blade lands to parry),
+##               Blade Mode (toggle), Dodge (crouch / roll / dive), Sprint (toggle).
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
+const SWIPE_MIN := 40.0
 
 var player: Node
 var stick_finger := -1
@@ -15,9 +16,10 @@ var stick_origin := Vector2.ZERO
 var stick_vec := Vector2.ZERO
 var look_finger := -1
 var look_last := Vector2.ZERO
-var button_fingers := {}       # finger index -> button name
-var toggles := {"lock": false}
-var buttons := {}              # name -> {pos, radius, label, action, toggle}
+var swipe_start := Vector2.ZERO
+var button_fingers := {}
+var toggles := {"blade": false, "sprint": false}
+var buttons := {}
 
 
 func _ready() -> void:
@@ -34,22 +36,26 @@ func _layout() -> void:
 	var right := s.x - 90.0
 	var bottom := s.y - 90.0
 	buttons = {
-		"fire":   {"pos": Vector2(right, bottom), "radius": 54.0, "label": "FIRE", "action": "fire", "toggle": false},
-		"lock":   {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "LOCK", "action": "lock", "toggle": true},
-		"roll":   {"pos": Vector2(right - 75, bottom - 120), "radius": r, "label": "ROLL", "action": "roll", "toggle": false},
-		"jump":   {"pos": Vector2(right - 245, bottom + 25), "radius": 38.0, "label": "JUMP", "action": "jump", "toggle": false},
-		"reload": {"pos": Vector2(right + 20, bottom - 215), "radius": 36.0, "label": "RELOAD", "action": "reload", "toggle": false},
+		"slash":  {"pos": Vector2(right, bottom), "radius": 56.0, "label": "SLASH", "action": "attack", "toggle": false},
+		"heavy":  {"pos": Vector2(right - 20, bottom - 125), "radius": r, "label": "HEAVY", "action": "heavy", "toggle": false},
+		"guard":  {"pos": Vector2(right - 135, bottom + 10), "radius": r, "label": "GUARD", "action": "guard", "toggle": false},
+		"blade":  {"pos": Vector2(right - 130, bottom - 105), "radius": r, "label": "BLADE", "action": "blade", "toggle": true},
+		"dodge":  {"pos": Vector2(right - 250, bottom + 25), "radius": 38.0, "label": "DODGE", "action": "roll", "toggle": false},
+		"sprint": {"pos": Vector2(right - 245, bottom - 75), "radius": 36.0, "label": "SPRINT", "action": "sprint", "toggle": true},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
-		"head":   {"pos": Vector2(right - 215, bottom - 250), "radius": 32.0, "label": "HEAD", "action": "part_head", "toggle": false, "locked": true},
-		"arm":    {"pos": Vector2(right - 215, bottom - 180), "radius": 32.0, "label": "ARM", "action": "part_arm", "toggle": false, "locked": true},
-		"leg":    {"pos": Vector2(right - 215, bottom - 110), "radius": 32.0, "label": "LEG", "action": "part_leg", "toggle": false, "locked": true},
-		"body":   {"pos": Vector2(right - 285, bottom - 180), "radius": 32.0, "label": "BODY", "action": "part_body", "toggle": false, "locked": true},
 	}
 	queue_redraw()
 
 
+func _process(_delta: float) -> void:
+	# Blade Mode ends on its own (energy, getting hit): keep the toggle honest
+	if toggles["blade"] and player and not player.in_blade_mode() and player.energy < 10.0:
+		toggles["blade"] = false
+		Input.action_release("blade")
+	queue_redraw()
+
+
 func _input(event: InputEvent) -> void:
-	# A real controller (like the Thor's) hides the touch buttons; touching the screen brings them back.
 	if (event is InputEventJoypadButton) or (event is InputEventJoypadMotion and abs(event.axis_value) > 0.5):
 		visible = false
 		return
@@ -68,8 +74,6 @@ func _input(event: InputEvent) -> void:
 func _touch_down(finger: int, pos: Vector2) -> void:
 	for name in buttons:
 		var b: Dictionary = buttons[name]
-		if b.get("locked", false) and not (player and player.target):
-			continue   # part buttons only exist while locked on
 		if pos.distance_to(b.pos) <= b.radius * 1.15:
 			button_fingers[finger] = name
 			if b.toggle:
@@ -90,6 +94,7 @@ func _touch_down(finger: int, pos: Vector2) -> void:
 	elif look_finger == -1:
 		look_finger = finger
 		look_last = pos
+		swipe_start = pos
 	queue_redraw()
 
 
@@ -102,8 +107,11 @@ func _touch_move(finger: int, pos: Vector2) -> void:
 	elif finger == look_finger:
 		var d := pos - look_last
 		look_last = pos
-		if player and player.target:
-			player.touch_aim = (player.touch_aim + d * 0.012).limit_length(1.0)
+		if player and player.in_blade_mode():
+			var sw := pos - swipe_start
+			if sw.length() > 12.0:
+				player.touch_cutting = true
+				player.touch_cut_angle = atan2(-sw.y, sw.x)
 		elif player:
 			player.yaw -= d.x * LOOK_SENSITIVITY
 			player.pitch = clamp(player.pitch - d.y * LOOK_SENSITIVITY, -1.2, 0.6)
@@ -116,8 +124,12 @@ func _touch_up(finger: int) -> void:
 		_apply_stick()
 	elif finger == look_finger:
 		look_finger = -1
-		if player:
-			player.touch_aim = Vector2.ZERO   # let go: aim springs back to center mass
+		if player and player.in_blade_mode():
+			var sw := look_last - swipe_start
+			if sw.length() > SWIPE_MIN:
+				player.touch_cut(atan2(-sw.y, sw.x))
+			else:
+				player.touch_cutting = false
 	elif button_fingers.has(finger):
 		var name: String = button_fingers[finger]
 		button_fingers.erase(finger)
@@ -143,42 +155,30 @@ func _axis(neg: String, pos: String, value: float) -> void:
 		Input.action_release(pos)
 
 
-func _process(_delta: float) -> void:
-	queue_redraw()   # stance and lock labels change during play
-
-
 func _draw() -> void:
 	var font := get_theme_default_font()
-	# Joystick (only while a finger is on it; a faint hint otherwise)
 	var s := get_viewport_rect().size
 	if stick_finger != -1:
 		draw_circle(stick_origin, STICK_RADIUS, Color(1, 1, 1, 0.12))
 		draw_arc(stick_origin, STICK_RADIUS, 0, TAU, 40, Color(1, 1, 1, 0.4), 3.0)
-		var knob := stick_origin + stick_vec * STICK_RADIUS
-		var run := stick_vec.length() >= 0.7
-		draw_circle(knob, 34, Color(1, 0.45, 0.35, 0.7) if run else Color(1, 1, 1, 0.6))
+		draw_circle(stick_origin + stick_vec * STICK_RADIUS, 34, Color(1, 1, 1, 0.6))
 	else:
 		var hint := Vector2(150, s.y - 150)
 		draw_arc(hint, STICK_RADIUS, 0, TAU, 40, Color(1, 1, 1, 0.18), 3.0)
 		draw_string(font, hint + Vector2(-34, 6), "MOVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.35))
-	# Buttons
+	if player and player.in_blade_mode() and look_finger == -1:
+		draw_string(font, Vector2(s.x * 0.55, s.y * 0.5), "SWIPE TO CUT", HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.75, 0.92, 1.0, 0.8))
 	for name in buttons:
 		var b: Dictionary = buttons[name]
-		if b.get("locked", false) and not (player and player.target):
-			continue
 		var held: bool = button_fingers.values().has(name) or (b.toggle and toggles.get(name, false))
 		var fill := Color(1, 0.85, 0.3, 0.55) if held else Color(0, 0, 0, 0.35)
+		if name == "blade" and held:
+			fill = Color(0.3, 0.7, 1.0, 0.6)
 		draw_circle(b.pos, b.radius, fill)
 		draw_arc(b.pos, b.radius, 0, TAU, 40, Color(1, 1, 1, 0.65), 3.0)
 		var text: String = b.label
-		if b.get("locked", false) and player and player.part == name:
-			draw_circle(b.pos, b.radius, Color(1, 0.25, 0.2, 0.6))   # the part you're aimed at
-		if name == "roll" and player and player.crouching:
-			draw_circle(b.pos, b.radius, Color(1, 0.85, 0.3, 0.55))
-			text = "CROUCH"
 		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 		draw_string(font, b.pos + Vector2(-w / 2.0, 6), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
-	# Phones held upright get a reminder
 	if s.y > s.x:
 		draw_rect(Rect2(Vector2.ZERO, s), Color(0, 0, 0, 0.75))
 		var msg := "Turn your phone sideways"

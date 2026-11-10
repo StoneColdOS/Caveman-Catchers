@@ -548,6 +548,90 @@ func impact(at: Vector3, on_mech: bool) -> void:
 		tw.tween_callback(sp.queue_free)
 
 
+## OIL. Thick black gouts arcing out of a wound, landing as puddles on the street.
+var _oil_mat: StandardMaterial3D
+var _oil_amber: StandardMaterial3D
+var _puddles: Array = []
+const MAX_PUDDLES := 70
+
+
+func oil(at: Vector3, dir: Vector3, n: int) -> void:
+	if _oil_mat == null:
+		_oil_mat = Util.mat(Color(0.03, 0.03, 0.04))
+		_oil_mat.metallic = 0.6
+		_oil_mat.roughness = 0.15
+	if _oil_amber == null:
+		_oil_amber = Util.mat(Color(0.45, 0.28, 0.06))
+		_oil_amber.metallic = 0.5
+		_oil_amber.roughness = 0.2
+	for i in n:
+		var d := MeshInstance3D.new()
+		d.mesh = Util.box(Vector3.ONE * rng.randf_range(0.25, 0.7))
+		d.material_override = _oil_mat if rng.randf() < 0.65 else _oil_amber   # black with dirty amber
+		d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(d)
+		d.global_position = at
+		var v := (dir + Vector3(rng.randf_range(-0.6, 0.6), rng.randf_range(-0.2, 0.8), rng.randf_range(-0.6, 0.6))).normalized() * rng.randf_range(6.0, 16.0)
+		var t := rng.randf_range(0.5, 0.9)
+		# Ballistic arc: x/z straight, y up then down
+		var land := at + Vector3(v.x, 0, v.z) * t
+		land.y = 0.05
+		var peak := at + Vector3(v.x, 0, v.z) * t * 0.5 + Vector3.UP * maxf(v.y, 2.0) * t * 0.35
+		var tw := d.create_tween()
+		tw.tween_property(d, "global_position", peak, t * 0.5).set_ease(Tween.EASE_OUT).set_trans(Tween.TRANS_QUAD)
+		tw.tween_property(d, "global_position", land, t * 0.5).set_ease(Tween.EASE_IN).set_trans(Tween.TRANS_QUAD)
+		tw.tween_callback(func():
+			if i % 3 == 0:
+				_puddle(land, rng.randf_range(0.8, 2.2))
+			d.queue_free())
+
+
+func _puddle(at: Vector3, size: float) -> void:
+	var p := MeshInstance3D.new()
+	p.mesh = Util.box(Vector3(size, 0.04, size * rng.randf_range(0.6, 1.4)))
+	p.material_override = _oil_mat
+	p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	p.rotation.y = rng.randf() * TAU
+	add_child(p)
+	p.global_position = Vector3(at.x, 0.06, at.z)
+	_puddles.append(p)
+	while _puddles.size() > MAX_PUDDLES:
+		var old: Node = _puddles.pop_front()
+		if is_instance_valid(old):
+			old.queue_free()
+
+
+## A stump keeps gushing in pulses for a while.
+func oil_fountain(stump: Node3D, seconds: float) -> void:
+	var pulses := int(seconds / 0.12)
+	var tw := create_tween()
+	for i in pulses:
+		tw.tween_interval(0.12)
+		tw.tween_callback(func():
+			if is_instance_valid(stump) and stump.is_inside_tree():
+				var up := stump.global_basis.y.normalized() if stump.global_basis.y.length() > 0.1 else Vector3.UP
+				oil(stump.global_position, (up + Vector3.UP).normalized(), 3))
+
+
+## Hot sparks flying off steel.
+func sparks(at: Vector3, n: int, color: Color) -> void:
+	for i in n:
+		var sp := MeshInstance3D.new()
+		sp.mesh = Util.box(Vector3(0.12, 0.12, rng.randf_range(0.5, 1.4)))
+		sp.material_override = Util.mat(color, true)
+		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sp)
+		sp.global_position = at
+		var dir := Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.2, 1), rng.randf_range(-1, 1)).normalized()
+		var end := at + dir * rng.randf_range(3.0, 9.0) + Vector3.DOWN * 1.5
+		if (end - at).length() > 0.1:
+			sp.look_at_from_position(at, end, Vector3.UP if absf(dir.y) < 0.95 else Vector3.RIGHT)
+		var tw := sp.create_tween()
+		tw.tween_property(sp, "global_position", end, rng.randf_range(0.18, 0.35))
+		tw.parallel().tween_property(sp, "scale", Vector3(0.2, 0.2, 0.2), 0.3)
+		tw.tween_callback(sp.queue_free)
+
+
 ## Mech goes down: a fireball of chunky cubes.
 func burst(at: Vector3) -> void:
 	for i in 18:

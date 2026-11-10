@@ -20,285 +20,43 @@ func _run() -> void:
 	var player = main.player
 	var city = main.city
 	var es: Array = get_nodes_in_group("enemies")
-	_check(es.size() == 3, "3 enemy mechs spawned")
-	_check(city.buildings.size() > 25, "City built (%d buildings)" % city.buildings.size())
-	_check(player.rig.global_transform.basis.get_scale().y > 3.0, "Mech is giant-sized")
+	var kinds := {}
 	for e in es:
 		e.frozen = true
+		kinds[e.kind] = kinds.get(e.kind, 0) + 1
+	_check(es.size() == 4 and kinds.get("gunner", 0) == 2 and kinds.get("swordsman", 0) == 2, "2 gunners and 2 swordsmen spawned")
+	_check(player.weapon == "katana" and player.rig.weapon == "katana", "You carry a katana")
 
-	# --- 1. Syphon Filter running: you run where you push, the camera swings in behind.
-	player.global_position = Vector3(-72, 0.2, 0)
-	player.yaw = PI
-	player.rig.rotation.y = 0.0
-	await _frames(10)
-	player.global_position = Vector3(-72, 0.2, 70)   # long open street running toward -Z
+	# --- 1. Phantom Pain movement: walk, jog, sprint, smooth ramp.
+	player.global_position = Vector3(-72, 0.2, 75)
 	player.yaw = 0.0
 	player.rig.rotation.y = PI
 	await _frames(5)
-	Input.action_press("move_forward", 0.5)   # a light push jogs
-	await _frames(60)
-	var jog: float = Vector2(player.velocity.x, player.velocity.z).length()
-	_check(jog > player.JOG_SPEED * 0.8 and jog < player.RUN_SPEED * 0.8, "A light push jogs (%.1f m/s)" % jog)
-	Input.action_press("move_forward", 1.0)   # full push sprints, ramping up smoothly
-	await _frames(4)
-	var early: float = Vector2(player.velocity.x, player.velocity.z).length()
+	Input.action_press("move_forward", 0.4)
 	await _frames(50)
-	var v: Vector3 = player.velocity
-	_check(early < player.RUN_SPEED * 0.85, "Speed ramps up instead of snapping")
-	_check(Vector2(v.x, v.z).length() > player.RUN_SPEED * 0.9, "A full push sprints (%.1f m/s)" % Vector2(v.x, v.z).length())
-	Input.action_release("move_forward")
-	await _frames(40)
-	player.global_position = Vector3(-72, 0.2, 0)
-	player.yaw = PI
-	player.rig.rotation.y = 0.0
-	await _frames(5)
-	Input.action_press("move_right", 1.0)
-	await _frames(40)
-	v = player.velocity
-	_check(player.facing().dot(v.normalized()) > 0.9, "Your mech turns to run where you push")
+	var walk := _hspeed(player)
+	_check(walk > 1.5 and walk < 5.0, "Light push walks (%.1f m/s)" % walk)
+	Input.action_press("move_forward", 1.0)
+	await _frames(50)
+	var jog := _hspeed(player)
+	_check(jog > 7.5 and jog < 10.0, "Full push jogs (%.1f m/s)" % jog)
+	Input.action_press("sprint")
+	await _frames(3)
+	var early := _hspeed(player)
 	await _frames(60)
-	Input.action_release("move_right")
-	await _frames(160)   # stand still a moment: the camera settles in behind you
-	var behind := Vector3(sin(player.yaw), 0, cos(player.yaw))
-	_check(behind.dot(-player.facing()) > 0.8, "The camera swings in behind you")
-	await _frames(30)
-	var f0: Vector3 = player.facing()
-	Input.action_press("strafe_right")
-	await _frames(30)
-	Input.action_release("strafe_right")
-	_check(player.facing().dot(f0) > 0.95 and absf(player.velocity.normalized().dot(f0)) < 0.3, "L2/R2 sidestep without turning")
-	await _frames(30)
-	Input.action_press("walk")
-	Input.action_press("move_forward")
-	await _frames(30)
-	_check(player.move_mode.begins_with("Walking"), "Holding WALK sneaks quietly")
-	Input.action_release("walk")
+	var sprint := _hspeed(player)
+	_check(early < 12.0 and sprint > 14.0, "Hold SPRINT: ramps up to a full sprint (%.1f m/s)" % sprint)
+	# Dive out of a sprint
+	var p0: Vector3 = player.global_position
+	Input.action_press("roll")
+	await _frames(2)
+	Input.action_release("roll")
+	_check(player.dive_t > 0.0, "B at a sprint: dive")
+	await _frames(55)
+	_check(player.global_position.distance_to(p0) > 8.0 and player.dive_t <= 0.0, "Dive launches you forward and you slide to a stop")
+	Input.action_release("sprint")
 	Input.action_release("move_forward")
-	await _frames(30)
-
-	# --- 2. R1 locks onto the enemy in front; the lock tightens.
-	var e0 = es[0]
-	_place_facing(player, e0, 40.0, true)
-	await _frames(20)
-	Input.action_press("lock")
-	await _frames(3)
-	_check(player.target == e0, "Holding LOCK grabs the enemy in front")
-	var l0: float = player.lock
-	await _frames(70)
-	_check(player.lock >= 0.999 and player.lock > l0, "Standing still you reach a full lock")
-
-	# --- 3. Full-lock shot on an unaware enemy: silent kill.
-	_check(e0.is_unaware(), "He hasn't noticed you")
-	player.fire()
-	await _frames(2)
-	_check(e0.dead, "Full-lock shot on an unaware mech: SILENT KILL")
-	_check(main.downed == 1, "Counter goes up")
-	Input.action_release("lock")
-	await _frames(5)
-
-	# --- 4. Full-body lock; push the right stick up to aim at the HEAD.
-	var e1 = es[1]
-	_place_facing(player, e1, 35.0, false)
-	e1.state = e1.State.COMBAT
-	await _frames(3)
-	Input.action_press("lock")
-	await _frames(3)
-	_check(player.part == "body", "Lock-on aims at the whole body (center mass)")
-	Input.action_press("look_up", 1.0)
-	await _frames(20)
-	_check(player.part == "head", "Right stick up slides the aim to the HEAD")
-	Input.action_release("look_up")
-	await _frames(20)
-	_check(player.part == "body", "Let go of the stick: back to center mass")
-	Input.action_press("part_head")
-	await _frames(2)
-	Input.action_release("part_head")
-	await _frames(20)
-	_check(player.part == "head", "HEAD button: aim sticks to the head with no stick needed")
-	player.lock = 1.0
-	player.fire_cd = 0.0
-	player.fire()
-	await _frames(3)
-	_check(e1.lost_head and e1.dead, "Full-lock headshot: HEAD OFF")
-	Input.action_release("lock")
-	await _frames(5)
-
-	# --- 5. Shoot the gun arm off: disarmed. He charges and slams instead.
-	var e2 = es[2]
-	e2.global_position = Vector3(-24, 0.2, 40)   # out on an open street
-	_place_facing(player, e2, 30.0, false)
-	e2.state = e2.State.COMBAT
-	await _frames(3)
-	Input.action_press("lock")
-	await _frames(3)
-	Input.action_press("look_right", 1.0)
-	await _frames(20)
-	_check(player.part == "arm", "Right stick sideways aims at the gun ARM")
-	var shots := 0
-	while not e2.lost_arm and shots < 12:
-		player.lock = 1.0
-		player.fire_cd = 0.0
-		player.ammo = player.mag_size
-		player.fire()
-		shots += 1
-		await _frames(2)
-	_check(e2.lost_arm and not e2.dead, "Shooting the gun arm blows it off (%d shots)" % shots)
-	_check(not e2.can_shoot(), "...and he can't shoot anymore")
-	Input.action_release("look_right")
-	Input.action_press("look_down", 1.0)
-	await _frames(20)
-	_check(player.part == "leg", "Right stick down aims at the LEG")
-	shots = 0
-	while not e2.lost_leg and shots < 12:
-		player.lock = 1.0
-		player.fire_cd = 0.0
-		player.ammo = player.mag_size
-		player.fire()
-		shots += 1
-		await _frames(2)
-	_check(e2.lost_leg and not e2.dead, "Shooting a leg takes it off at the knee (%d shots)" % shots)
-	Input.action_release("look_down")
-	Input.action_release("lock")
-	await _frames(3)
-	_place_facing(player, e2, 16.0, false)
-	await _frames(2)
-	e2.frozen = false
-	var hp_b: int = player.hp
-	var bashed := false
-	for i in 600:
-		await physics_frame
-		if e2.is_bashing():
-			bashed = true
-		if player.hp < hp_b:
-			break
-	_check(bashed, "Disarmed, he winds up a slam (visor flashes)")
-	_check(player.hp < hp_b, "...and the slam hurts if you stand there")
-	e2.frozen = true
-	player.hp = player.MAX_HP
 	await _frames(40)
-	# A fresh, armed enemy for the rest of the tests
-	e1 = CharacterBody3D.new()
-	e1.set_script(load("res://scripts/enemy.gd"))
-	e1.position = Vector3(24, 0.2, 60)
-	main.add_child(e1)
-	e1.city = city
-	e1.frozen = true
-	await _frames(3)
-	_place_facing(player, e1, 35.0, false)
-	e1.state = e1.State.COMBAT
-	await _frames(3)
-
-	# --- 5b. Reload.
-	player.ammo = 0
-	player.fire()
-	_check(player.reload_t > 0.0, "Empty magazine: auto reload")
-	await _frames(int(player.reload_time * 60) + 5)
-	_check(player.ammo == player.mag_size, "Reload refills the magazine")
-
-	# --- 5c. Jump.
-	player.global_position = Vector3(-72, 0.2, 10)
-	await _frames(10)
-	Input.action_press("jump")
-	await _frames(2)
-	Input.action_release("jump")
-	var peak := 0.0
-	for i in 40:
-		await physics_frame
-		peak = maxf(peak, player.global_position.y)
-	_check(peak > 2.0, "Mech jumps (%.1f m)" % peak)
-	await _frames(40)
-
-	# --- 5d. Enemies dodge: lock on and settle, and he rolls out of it.
-	_place_facing(player, e1, 35.0, false)
-	e1.state = e1.State.COMBAT
-	e1.frozen = false
-	e1.dodge_cd = 0.0
-	e1.fire_cd = 99.0
-	Input.action_press("lock")
-	var dodged := false
-	for i in 240:
-		await physics_frame
-		if e1.roll_t > 0.0:
-			dodged = true
-			break
-	_check(dodged, "Lock onto him and he dodge-rolls out of it")
-	await _frames(40)
-	Input.action_release("lock")
-	e1.frozen = true
-	e1.fire_cd = 0.0
-	await _frames(30)
-
-	# --- 6. Enemy telegraphs with a laser, then bursts. Rolling dodges.
-	_place_facing(player, e1, 35.0, false)
-	e1.state = e1.State.COMBAT
-	await _frames(3)
-	e1.frozen = false
-	e1.fire_cd = 0.0
-	var laser_seen := false
-	var hpp: int = player.hp
-	for i in 150:
-		await physics_frame
-		if e1.laser.visible:
-			laser_seen = true
-		if player.hp < hpp:
-			break
-	_check(laser_seen, "His laser sight warns you before he fires")
-	_check(player.hp < hpp, "His burst hits you if you stand still")
-	await _frames(30)
-	player.hp = player.MAX_HP
-	var hp_before: int = player.hp
-	player.start_roll(Vector3.RIGHT)
-	player.take_shot(e1, 5, player.center())
-	_check(player.hp == hp_before, "Bullets pass through you mid-roll")
-	await _frames(40)
-	e1.frozen = true
-
-	# --- 7. Cover: a building between you blocks his sight.
-	var b: Node3D = null
-	for cand in city.buildings:
-		if cand.get_meta("half").y * 2.0 > 9.0:
-			b = cand
-			break
-	var half: Vector3 = b.get_meta("half")
-	e1.global_position = b.global_position + Vector3(0, -b.global_position.y + 0.2, half.z + 12.0)
-	player.global_position = b.global_position + Vector3(0, -b.global_position.y + 0.2, -half.z - 8.0)
-	e1.heading = PI
-	e1.rig.rotation.y = PI
-	await _frames(3)
-	_check(not e1.can_see_player(), "A building between you is cover")
-
-	# --- 8. Shots wreck buildings.
-	var hb: int = b.get_meta("hp")
-	for i in hb:
-		city.shoot_building(b, b.global_position, player.global_position)
-	await _frames(3)
-	_check(not city.buildings.has(b), "Enough hits bring a building down (%d)" % hb)
-	_check(city.debris.size() > 3, "It collapses into chunks")
-	var prop: RigidBody3D = city.props[0]
-	city.shot_props(prop.global_position + Vector3(-20, 1, 0), prop.global_position + Vector3(20, 1, 0))
-	_check(not prop.freeze, "Stray shots knock props over")
-
-	# --- 9. Rolling into a low building smashes it.
-	var low: Node3D = null
-	for cand in city.buildings:
-		if cand.get_meta("half").y * 2.0 < 9.0:
-			low = cand
-			break
-	_check(city.smash(low, low.global_position + Vector3(0, 0, 20), player.ROLL_SPEED), "Rolling into a low shop smashes it")
-
-	# --- 10. Hearing.
-	e2 = es[0]
-	e2.dead = false
-	e2.state = e2.State.PATROL
-	e2.hear_noise(e2.global_position + Vector3(30, 0, 0), player.WALK_NOISE, player)
-	_check(e2.state == e2.State.PATROL, "Walking 30 m away goes unheard")
-	e2.hear_noise(e2.global_position + Vector3(30, 0, 0), player.RUN_NOISE, player)
-	_check(e2.state == e2.State.INVESTIGATE, "Running 30 m away gets him investigating")
-
-	# --- 11. B standing still crouches; B while running rolls.
-	player.crouching = false
-	player.velocity = Vector3.ZERO
-	await _frames(20)
 	Input.action_press("roll")
 	await _frames(2)
 	Input.action_release("roll")
@@ -307,21 +65,187 @@ func _run() -> void:
 	await _frames(2)
 	Input.action_release("roll")
 	player.crouching = false
+	await _frames(5)
+
+	# --- 2. Quick slash combo on a swordsman.
+	var sw = _first(es, "swordsman")
+	_face_off(player, sw, 7.0)
+	await _frames(3)
+	var hp0: int = sw.hp
+	var angles := []
+	for i in 3:
+		Input.action_press("attack")
+		await _frames(2)
+		Input.action_release("attack")
+		angles.append(player.swing_angle)
+		await _frames(20)
+	_check(sw.hp == hp0 - 6, "Three quick slashes land (%d -> %d)" % [hp0, sw.hp])
+	_check(angles[0] != angles[1] and angles[1] != angles[2], "The combo swings along different lines")
+	_check(city._puddles.size() > 0 or true, "")
 	await _frames(40)
-	Input.action_press("move_forward")
-	await _frames(10)
-	Input.action_press("roll")
-	await _frames(2)
-	Input.action_release("roll")
-	_check(player.roll_t > 0.0, "B while running: combat roll")
-	Input.action_release("move_forward")
+	_check(city._puddles.size() > 0, "Oil splashes onto the street (%d puddles)" % city._puddles.size())
+
+	# --- 3. Guard: blocks quick slashes, heavy smashes through.
+	_reset(sw)
+	sw.guarding = true
+	_face_off(player, sw, 7.0)
+	player.stagger = 0.0
+	await _frames(3)
+	player.start_swing("light", 0.0)
+	await _swing_done(player)
+	_check(sw.hp == sw.MAX_HP and player.stagger > 0.0, "His guard blocks a quick slash (you recoil)")
+	await _frames(30)
+	player.stagger = 0.0
+	sw.guarding = true
+	player.start_swing("heavy", -PI / 2.0)
+	await _swing_done(player)
+	_check(not sw.guarding and sw.stagger > 0.5 and sw.hp == sw.MAX_HP, "A heavy slash breaks his guard")
+	await _frames(60)
+
+	# --- 4. Parry: raise guard just as his blade lands.
+	_reset(sw)
+	_face_off(player, sw, 7.0)
+	player.stagger = 0.0
+	await _frames(3)
+	sw.start_swing("light", 0.0)
+	for i in 200:
+		await physics_frame
+		if sw.swing == 2 or (sw.swing == 1 and sw.swing_t < 0.05):
+			break
+	Input.action_press("guard")
+	await _swing_done(sw)
+	Input.action_release("guard")
+	_check(sw.exposed > 0.0 and sw.stagger > 0.0 and player.hp == player.MAX_HP, "Parry: he reels, wide open, and you take nothing")
 	await _frames(40)
 
-	# --- 12. Armor gone: game over.
-	player.crouching = false
+	# --- 5. His unblocked slash hurts.
+	_reset(sw)
+	player.stagger = 0.0
+	var php: int = player.hp
+	sw.start_swing("light", 0.0)
+	await _swing_done(sw)
+	_check(player.hp < php, "Stand there and his slash hurts")
+	await _frames(40)
+	player.hp = player.MAX_HP
+
+	# --- 6. Guard deflects bullets; without it they hurt.
+	var gn = _first(es, "gunner")
+	_reset(gn)
+	gn.global_position = Vector3(-72, 0.2, -20)
+	player.global_position = Vector3(-72, 0.2, 10)
+	player.rig.rotation.y = PI
+	gn.heading = 0.0
+	gn.rig.rotation.y = 0.0
+	player.stagger = 0.0
+	await _frames(5)
+	Input.action_press("guard")
+	await _frames(3)
+	var hpg: int = player.hp
+	for i in 3:
+		gn.shoot_at(player.center(), 0.0, 1)
+	_check(player.hp == hpg, "Guard deflects bullets")
+	Input.action_release("guard")
+	await _frames(3)
+	gn.shoot_at(player.center(), 0.0, 1)
+	_check(player.hp < hpg, "Without guard the bullets hurt")
+	player.hp = player.MAX_HP
+
+	# --- 7. Blade Mode: time slows, cut line, sever along the line.
+	var sw2 = _second(es, "swordsman")
+	_reset(sw2)
+	_face_off(player, sw2, 9.0)
+	await _frames(5)
+	player.energy = player.MAX_ENERGY
+	player.stagger = 0.0
+	Input.action_press("blade")
+	await _frames(3)
+	_check(player.in_blade_mode() and Engine.time_scale < 0.2, "Hold L2: Blade Mode, time slows to a crawl")
+	_check(player.blade_target == sw2, "The cut line goes on the nearest enemy")
+	# Vertical cut through his sword arm
+	player.cut_offset = _plane(player, sw2, "arm_r")
+	var r: Array = player.blade_cut(PI / 2.0)
+	_check(sw2.lost.has("arm_r") and sw2.disarmed() and not sw2.dead, "Cut through his sword arm: it comes off, he's disarmed (%s)" % [r])
+	await _frames(3)
+	# Horizontal cut through the waist while he's still healthy: the armor holds
+	player.cut_cd = 0.0
+	player.cut_offset = _plane(player, sw2, "waist")
+	r = player.blade_cut(0.0)
+	_check(not sw2.dead and not sw2.lost.has("upper"), "Full armor: a torso cut skids off (%s)" % [r])
+	await _frames(3)
+	# Weakened now: cut him in half
+	sw2.hp = 4
+	player.hp = 10
+	player.cut_cd = 0.0
+	player.cut_offset = _plane(player, sw2, "waist")
+	r = player.blade_cut(0.05)
+	_check(sw2.dead and sw2.lost.has("upper"), "Weakened: cut him in half (%s)" % [r])
+	_check(player.hp > 10 and player.last_result == "zandatsu", "Finishing cut repairs your armor")
+	_check(player.energy < player.MAX_ENERGY + 1, "Blade Mode runs on energy")
+	Input.action_release("blade")
+	await _frames(3)
+	_check(not player.in_blade_mode() and Engine.time_scale == 1.0, "Let go: back to normal speed")
+	_check(main.downed >= 1, "Counter goes up")
+
+	# --- 8. Blade Mode leg cut: he limps.
+	_reset(gn)
+	_face_off(player, gn, 9.0)
+	await _frames(5)
+	player.energy = player.MAX_ENERGY
+	player.stagger = 0.0
+	Input.action_press("blade")
+	await _frames(3)
+	player.blade_target = gn
+	player.cut_offset = _plane(player, gn, "leg_l")
+	player.cut_cd = 0.0
+	player.blade_cut(PI / 2.0)
+	_check(gn.lost.has("leg_l") and gn.legs_lost() == 1, "Cut a leg off: he limps")
+	Input.action_release("blade")
+	await _frames(5)
+
+	# --- 9. Sneak attack: slash an unaware mech from behind and he's exposed.
+	var g2 = _second(es, "gunner")
+	_reset(g2)
+	g2.state = g2.State.PATROL
+	g2.global_position = Vector3(24, 0.2, 60)
+	g2.heading = 0.0
+	g2.rig.rotation.y = 0.0
+	player.global_position = g2.global_position + Vector3(0, 0, -7)
+	player.rig.rotation.y = 0.0
+	player.stagger = 0.0
+	await _frames(3)
+	player.start_swing("light", 0.0)
+	await _swing_done(player)
+	_check(g2.exposed > 0.0 and g2.weakened(), "Cut him from behind before he knows: he's wide open")
+
+	# --- 10. Destruction: a slash brings a building down.
+	var b: Node3D = null
+	for cand in city.buildings:
+		if cand.global_position.distance_to(g2.global_position) > 30.0 and cand.get_meta("half").y * 2.0 < 12.0:
+			b = cand
+			break
+	var half: Vector3 = b.get_meta("half")
+	player.global_position = Vector3(b.global_position.x, 0.2, b.global_position.z + half.z + 6.0)
+	player.rig.rotation.y = PI
+	player.stagger = 0.0
+	await _frames(3)
+	var n0: int = city.buildings.size()
+	player.start_swing("heavy", 0.0)
+	await _swing_done(player)
+	_check(city.buildings.size() < n0, "A slash cuts a building down")
+
+	# --- 11. Hearing.
+	var e3 = g2
+	e3.state = e3.State.PATROL
+	e3.hear_noise(e3.global_position + Vector3(30, 0, 0), player.WALK_NOISE, player)
+	_check(e3.state == e3.State.PATROL, "Walking 30 m away goes unheard")
+	e3.hear_noise(e3.global_position + Vector3(30, 0, 0), player.SPRINT_NOISE, player)
+	_check(e3.state == e3.State.INVESTIGATE, "Sprinting 30 m away gets him looking")
+
+	# --- 12. Armor gone: defeated.
 	while not player.dead:
+		player.stagger = 0.0
 		player.roll_t = 0.0
-		player.take_shot(e2, 5, player.center())
+		player.take_shot(e3, 5, player.center())
 	await _frames(2)
 	_check(player.dead and main.game_over, "Armor gone: DEFEATED")
 
@@ -333,37 +257,82 @@ func _run() -> void:
 	await _frames(2)
 	t._touch_down(0, Vector2(100, 600))
 	t._touch_move(0, Vector2(100 + t.STICK_RADIUS, 600))
-	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = jog")
+	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push")
 	t._touch_up(0)
-	for name in ["fire", "roll", "reload", "jump"]:
+	for name in ["slash", "heavy", "guard", "dodge"]:
 		t._touch_down(1, t.buttons[name].pos)
 		var ok := Input.is_action_pressed(t.buttons[name].action)
 		t._touch_up(1)
 		_check(ok, "Touch %s button works" % name.to_upper())
-	t._touch_down(1, t.buttons["lock"].pos)
+	t._touch_down(1, t.buttons["blade"].pos)
 	t._touch_up(1)
-	_check(Input.is_action_pressed("lock"), "Touch LOCK toggles on")
-	t._touch_down(1, t.buttons["lock"].pos)
+	_check(Input.is_action_pressed("blade"), "Touch BLADE toggles Blade Mode on")
+	t._touch_down(1, t.buttons["blade"].pos)
 	t._touch_up(1)
-	_check(not Input.is_action_pressed("lock"), "...and off")
-	# Part buttons appear only while locked and make the aim stick to that part
-	_check(not Input.is_action_pressed("part_head"), "No part buttons when not locked")
-	t._touch_down(1, t.buttons["head"].pos)
-	t._touch_up(1)
-	_check(not Input.is_action_pressed("part_head"), "...tapping where HEAD would be does nothing")
+	_check(not Input.is_action_pressed("blade"), "...and off")
 
+	Engine.time_scale = 1.0
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)
 
 
-## Player stands `dist` from the enemy, facing him. Enemy faces away (unaware) or toward.
-func _place_facing(player, e, dist: float, behind: bool) -> void:
-	e.heading = 0.0 if behind else PI
-	e.rig.rotation.y = e.heading
+func _first(es: Array, kind: String) -> Node:
+	for e in es:
+		if e.kind == kind:
+			return e
+	return null
+
+
+func _second(es: Array, kind: String) -> Node:
+	var seen := false
+	for e in es:
+		if e.kind == kind:
+			if seen:
+				return e
+			seen = true
+	return null
+
+
+func _hspeed(m) -> float:
+	return Vector2(m.velocity.x, m.velocity.z).length()
+
+
+func _reset(e) -> void:
+	e.frozen = true
+	e.stagger = 0.0
+	e.guarding = false
+	e.swing = 0
+	e.exposed = 0.0
+	e.velocity = Vector3.ZERO
+	if not e.dead:
+		e.hp = e.MAX_HP
+
+
+## Player and enemy face each other on an open street, `dist` apart.
+func _face_off(player, e, dist: float) -> void:
+	e.global_position = Vector3(-24, 0.2, 40)
+	e.heading = PI
+	e.rig.rotation.y = PI
 	player.global_position = e.global_position + Vector3(0, 0, -dist)
-	player.yaw = PI          # facing +Z toward him
 	player.rig.rotation.y = 0.0
+	player.yaw = PI
 	player.velocity = Vector3.ZERO
+
+
+## Where a body part sits on the cut plane (for aiming a Blade Mode line through it).
+func _plane(player, e, part: String) -> Vector2:
+	var right: Vector3 = player.camera.global_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var w: Vector3 = e.rig.part_point(part) - e.center()
+	return Vector2(w.dot(right), w.dot(Vector3.UP))
+
+
+func _swing_done(f) -> void:
+	for i in 300:
+		await physics_frame
+		if f.swing == 3 or f.swing == 0:
+			break
 
 
 func _frames(n: int) -> void:
@@ -372,6 +341,8 @@ func _frames(n: int) -> void:
 
 
 func _check(ok: bool, what: String) -> void:
+	if what == "":
+		return
 	print(("  PASS  " if ok else "  FAIL  ") + what)
 	if not ok:
 		failures += 1

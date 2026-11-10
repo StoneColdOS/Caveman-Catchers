@@ -27,7 +27,20 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 11: smooth sprint, full-body lock, dodging enemies (current)
+## Prototype 12: katana, Blade Mode, Phantom Pain movement (current)
+
+- [x] Guns dropped. A katana with a quick 3-hit combo, a heavy that breaks guards, guard, parry, and bullet deflection
+- [x] Blade Mode (hold L2): time slows, a cut line on the enemy (right stick angle, left stick slide), flick to cut; severs whatever the line crosses
+- [x] Full dismemberment: head, both arms, both legs, cut in half; real pieces fly, stumps gush oil
+- [x] Armor holds on head/torso until weakened or parried; a finishing cut repairs you
+- [x] Over-the-top FX: oil gouts and puddles, sparks, hit-stop, slow-motion kills, blade trails
+- [x] Phantom Pain movement: walk, jog, sprint (hold A), dive from a sprint, roll, crouch; close over-the-shoulder camera
+- [x] Enemy mix: gunners (lasers, bursts) and swordsmen (telegraphed swings, guards, counters); disarmed mechs slam
+- [x] Touch: SLASH, HEAVY, GUARD, BLADE toggle, DODGE, SPRINT; swipe to cut in Blade Mode
+- [ ] Play it on the Thor: is Blade Mode readable and satisfying? Is the camera close enough without blocking the enemy?
+- [ ] Sound pass
+
+## Prototype 11: smooth sprint, full-body lock, dodging enemies
 
 - [x] Playtest of prototype 10. **Verdict:** disliked the movement and the loud alerts; lock-on too easy; wanted a full-body lock with the stick choosing head / limbs / body
 - [x] Removed sound rings, the LOUD movement text and the COMBAT banner

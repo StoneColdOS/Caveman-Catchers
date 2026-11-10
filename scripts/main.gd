@@ -1,6 +1,6 @@
 extends Node3D
 ## Mech Mania: builds the night-time Tokyo neighborhood (heavy PSX look), your mech,
-## the enemy mechs and the HUD (lock-on reticle, ammo, armor).
+## the enemy mechs and the HUD (armor, blade energy, the Blade Mode cut line).
 
 const Util := preload("res://scripts/util.gd")
 const Controls := preload("res://scripts/controls.gd")
@@ -11,7 +11,8 @@ const FighterScript := preload("res://scripts/fighter.gd")
 const TouchScript := preload("res://scripts/touch_controls.gd")
 
 const PLAYER_SPAWN := Vector3(-72, 0.2, 72)
-const ENEMY_SPAWNS := [Vector3(24, 0.2, -24), Vector3(72, 0.2, 24), Vector3(-24, 0.2, -72)]
+const ENEMY_SPAWNS := [Vector3(24, 0.2, -24), Vector3(72, 0.2, 24), Vector3(-24, 0.2, -72), Vector3(-24, 0.2, 24)]
+const ENEMY_KINDS := ["gunner", "swordsman", "gunner", "swordsman"]
 
 var player: CharacterBody3D
 var city: Node3D
@@ -20,7 +21,7 @@ var game_over := false
 var count_label: Label
 var mode_label: Label
 var alert_label: Label
-var ammo_label: Label
+var energy_bar: ProgressBar
 var reticle: Control
 var hurt_rect: ColorRect
 var result_label: Label
@@ -120,9 +121,11 @@ func _spawn_player() -> void:
 
 
 func _spawn_enemies() -> void:
-	for spot in ENEMY_SPAWNS:
+	for i in ENEMY_SPAWNS.size():
+		var spot: Vector3 = ENEMY_SPAWNS[i]
 		var e := CharacterBody3D.new()
 		e.set_script(EnemyScript)
+		e.kind = ENEMY_KINDS[i]
 		e.position = spot
 		add_child(e)
 		e.city = city
@@ -186,7 +189,20 @@ func _build_hud() -> void:
 	bg.bg_color = Color(0, 0, 0, 0.6)
 	armor_bar.add_theme_stylebox_override("background", bg)
 	layer.add_child(armor_bar)
-	ammo_label = _label(30, Vector2(24, 136), layer)
+	var energy_text := _label(20, Vector2(24, 132), layer)
+	energy_text.text = "BLADE"
+	energy_bar = ProgressBar.new()
+	energy_bar.max_value = player.MAX_ENERGY
+	energy_bar.show_percentage = false
+	energy_bar.position = Vector2(110, 136)
+	energy_bar.size = Vector2(220, 16)
+	var efill := StyleBoxFlat.new()
+	efill.bg_color = Color(0.3, 0.75, 1.0)
+	energy_bar.add_theme_stylebox_override("fill", efill)
+	var ebg := StyleBoxFlat.new()
+	ebg.bg_color = Color(0, 0, 0, 0.6)
+	energy_bar.add_theme_stylebox_override("background", ebg)
+	layer.add_child(energy_bar)
 
 	alert_label = Label.new()
 	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -209,7 +225,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "Run: L-stick  Lock: R1 (R-stick aims: head/arm/leg)  Fire: R2  Manual aim: L1  Roll: L2 or B  Jump: A  Reload: Y"
+	hint_label.text = "Slash: X/R2  Heavy: Y  Guard/parry: L1  Blade Mode: hold L2 (R-stick angle, L-stick slide, flick to cut)  Sprint: A  Crouch/roll/dive: B"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44
@@ -240,8 +256,7 @@ func _update_hud_live(delta: float) -> void:
 		return
 	armor_bar.value = player.hp
 	mode_label.text = "Crouching" if player.crouching else ""
-	ammo_label.text = ("RELOADING..." if player.reload_t > 0.0 else "AMMO  %d / %d" % [player.ammo, player.mag_size])
-	ammo_label.modulate = Color(1, 0.6, 0.3) if player.reload_t > 0.0 or player.ammo <= 3 else Color.WHITE
+	energy_bar.value = player.energy
 	hurt_rect.color.a = player.hurt * 0.35
 	reticle.queue_redraw()
 
@@ -253,7 +268,7 @@ func _update_hud_live(delta: float) -> void:
 
 	# Flash what your last strike did
 	if player.last_result != "":
-		var words := {"crit": "CRITICAL", "kill": "MECH DOWN", "silent": "SILENT KILL", "headshot": "HEADSHOT", "decap": "HEAD OFF", "disarmed": "DISARMED", "leg": "LEG OFF"}
+		var words := {"kill": "CUT DOWN", "zandatsu": "CUT IN HALF  +REPAIR", "cut": "SEVERED", "armor": "ARMOR HOLDS", "parry": "PARRY", "break": "GUARD BREAK", "block": "BLOCKED", "deflect": "DEFLECTED", "hit": ""}
 		result_label.text = words.get(player.last_result, "")
 		result_label.modulate = Color(1, 0.85, 0.4) if player.last_result != "crit" else Color(1, 0.5, 0.4)
 		player.last_result = ""
@@ -263,58 +278,50 @@ func _update_hud_live(delta: float) -> void:
 		result_label.text = ""
 
 
-## Crosshair, or lock brackets around your target that close in as the lock settles.
-## White = loose, yellow = getting there, red = full lock (double damage).
+## Blade Mode overlay: dim blue wash, letterbox bars, and the cut line across the
+## target (it tilts with the right stick and slides with the left).
 func _draw_reticle() -> void:
 	if player == null or player.dead:
 		return
-	var cam: Camera3D = player.camera
 	var size := reticle.get_viewport_rect().size
-	var hm: float = player.hit_marker
-	if player.target and is_instance_valid(player.target):
-		var tgt = player.target
-		var top: Vector3 = tgt.global_position + Vector3.UP * 10.5
-		var bot: Vector3 = tgt.global_position
-		if cam.is_position_behind(top) or cam.is_position_behind(bot):
-			return
-		var pt := cam.unproject_position(top)
-		var pb := cam.unproject_position(bot)
-		var hh := absf(pb.y - pt.y) * 0.5
-		var mid := (pt + pb) * 0.5
-		var hw := hh * 0.45
-		var l: float = player.lock
-		var c := Color(1, 1, 1).lerp(Color(1, 0.9, 0.2), clampf(l * 2.0, 0, 1)).lerp(Color(1, 0.15, 0.1), clampf(l * 2.0 - 1.0, 0, 1))
-		if l >= 0.999:
-			c = Color(1, 0.1, 0.1)
-		# Full-body brackets that tighten as the lock settles
-		var grow := lerpf(1.6, 1.05, l)
-		var ex := hw * grow
-		var ey := hh * grow
-		var arm := minf(ex, ey) * 0.35
-		for sx in [-1.0, 1.0]:
-			for sy in [-1.0, 1.0]:
-				var corner := mid + Vector2(sx * ex, sy * ey)
-				reticle.draw_line(corner, corner - Vector2(sx * arm, 0), c, 3.0)
-				reticle.draw_line(corner, corner - Vector2(0, sy * arm), c, 3.0)
-		# The aim dot (moved with the right stick) and the part under it
-		var dot := cam.unproject_position(player.lock_point())
-		reticle.draw_circle(dot, 6.0, c)
-		reticle.draw_arc(dot, 12.0, 0, TAU, 20, c, 2.0)
-		var font := reticle.get_theme_default_font()
-		var label: String = player.part.to_upper()
-		reticle.draw_string_outline(font, dot + Vector2(18, 8), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 6, Color.BLACK)
-		reticle.draw_string(font, dot + Vector2(18, 8), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, c)
-		if hm > 0.0:
-			_hit_x(dot, Color(1, 1, 1, hm * 5.0))
-	else:
-		var p := size * 0.5
-		var c := Color(1, 1, 1, 0.75) if player.is_aiming() else Color(1, 1, 1, 0.35)
-		reticle.draw_line(p + Vector2(-14, 0), p + Vector2(-5, 0), c, 3.0)
-		reticle.draw_line(p + Vector2(14, 0), p + Vector2(5, 0), c, 3.0)
-		reticle.draw_line(p + Vector2(0, -14), p + Vector2(0, -5), c, 3.0)
-		reticle.draw_line(p + Vector2(0, 14), p + Vector2(0, 5), c, 3.0)
-		if hm > 0.0:
-			_hit_x(p, Color(1, 1, 1, hm * 5.0))
+	if not player.in_blade_mode():
+		if player.hit_marker > 0.0:
+			_hit_x(size * 0.5, Color(1, 1, 1, player.hit_marker * 5.0))
+		return
+	reticle.draw_rect(Rect2(Vector2.ZERO, size), Color(0.05, 0.15, 0.35, 0.28))
+	var bar := size.y * 0.09
+	reticle.draw_rect(Rect2(0, 0, size.x, bar), Color(0, 0, 0, 0.85))
+	reticle.draw_rect(Rect2(0, size.y - bar, size.x, bar), Color(0, 0, 0, 0.85))
+	var cam: Camera3D = player.camera
+	var right := cam.global_basis.x
+	right.y = 0.0
+	right = right.normalized()
+	var base: Vector3 = player.global_position + player.facing() * 9.0 + Vector3.UP * 6.0
+	var t = player.blade_target
+	if t and is_instance_valid(t):
+		base = t.center()
+	var p0: Vector3 = base + right * player.cut_offset.x + Vector3.UP * player.cut_offset.y
+	var d := Vector2(cos(player.cut_angle), sin(player.cut_angle))
+	var dw: Vector3 = right * d.x + Vector3.UP * d.y
+	var a3 := p0 - dw * 9.0
+	var b3 := p0 + dw * 9.0
+	if cam.is_position_behind(a3) or cam.is_position_behind(b3):
+		return
+	var a2 := cam.unproject_position(a3)
+	var b2 := cam.unproject_position(b3)
+	var glow := Color(0.4, 0.85, 1.0, 0.35)
+	reticle.draw_line(a2, b2, glow, 14.0)
+	reticle.draw_line(a2, b2, Color(0.85, 0.97, 1.0), 3.0)
+	var font := reticle.get_theme_default_font()
+	var label := "BLADE MODE"
+	if t and is_instance_valid(t) and not t.dead:
+		label += "   " + ("WEAKENED: CUT THROUGH" if t.weakened() else "LIMBS ONLY (armor)")
+	var lw := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28).x
+	var lp := Vector2((size.x - lw) * 0.5, size.y - bar - 24)
+	reticle.draw_string_outline(font, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, 8, Color.BLACK)
+	reticle.draw_string(font, lp, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 28, Color(0.7, 0.9, 1.0))
+	if player.hit_marker > 0.0:
+		_hit_x(cam.unproject_position(p0), Color(1, 1, 1, player.hit_marker * 4.0))
 
 
 func _hit_x(p: Vector2, c: Color) -> void:
@@ -384,7 +391,7 @@ func _update_debug() -> void:
 	for id in pads:
 		lines.append("Pad %d: %s" % [id, Input.get_joy_name(id)])
 	var held: PackedStringArray = []
-	for a in ["lock", "aim", "fire", "strafe_left", "strafe_right", "roll", "jump", "reload"]:
+	for a in ["attack", "heavy", "guard", "blade", "sprint", "roll"]:
 		if Input.is_action_pressed(a):
 			held.append(a)
 	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))
