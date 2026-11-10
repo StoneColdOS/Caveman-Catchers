@@ -2,7 +2,7 @@ extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick. Light push sneaks, full push runs.
 ##   Right side: drag anywhere empty to look around.
-##   Buttons:    Jump, Grab, Punch, Lamp and a Crouch toggle.
+##   Buttons:    Slash, Guard (hold), Dash, Stance (cycles), Lock.
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -14,7 +14,7 @@ var stick_vec := Vector2.ZERO
 var look_finger := -1
 var look_last := Vector2.ZERO
 var button_fingers := {}       # finger index -> button name
-var toggles := {"crouch": false}
+var toggles := {}
 var buttons := {}              # name -> {pos, radius, label, action, toggle}
 
 
@@ -32,11 +32,11 @@ func _layout() -> void:
 	var right := s.x - 90.0
 	var bottom := s.y - 90.0
 	buttons = {
-		"jump":   {"pos": Vector2(right, bottom), "radius": r, "label": "JUMP", "action": "jump", "toggle": false},
-		"net":    {"pos": Vector2(right - 115, bottom + 10), "radius": r, "label": "GRAB", "action": "net", "toggle": false},
-		"crouch": {"pos": Vector2(right - 225, bottom + 25), "radius": 38.0, "label": "CROUCH", "action": "crouch", "toggle": true},
-		"punch":  {"pos": Vector2(right - 70, bottom - 110), "radius": r, "label": "PUNCH", "action": "punch", "toggle": false},
-		"light":  {"pos": Vector2(right + 20, bottom - 200), "radius": 34.0, "label": "LAMP", "action": "light", "toggle": false},
+		"slash":  {"pos": Vector2(right, bottom), "radius": 54.0, "label": "SLASH", "action": "slash", "toggle": false},
+		"guard":  {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "GUARD", "action": "guard", "toggle": false},
+		"dash":   {"pos": Vector2(right - 75, bottom - 120), "radius": r, "label": "DASH", "action": "dash", "toggle": false},
+		"stance": {"pos": Vector2(right + 20, bottom - 215), "radius": 40.0, "label": "STANCE", "action": "stance_cycle", "toggle": false},
+		"lock":   {"pos": Vector2(right - 245, bottom + 25), "radius": 36.0, "label": "LOCK", "action": "lock", "toggle": false},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 	}
 	queue_redraw()
@@ -131,6 +131,10 @@ func _axis(neg: String, pos: String, value: float) -> void:
 		Input.action_release(pos)
 
 
+func _process(_delta: float) -> void:
+	queue_redraw()   # stance and lock labels change during play
+
+
 func _draw() -> void:
 	var font := get_theme_default_font()
 	# Joystick (only while a finger is on it; a faint hint otherwise)
@@ -148,12 +152,18 @@ func _draw() -> void:
 	# Buttons
 	for name in buttons:
 		var b: Dictionary = buttons[name]
-		var held: bool = button_fingers.values().has(name) or (b.toggle and toggles[name])
+		var held: bool = button_fingers.values().has(name) or (b.toggle and toggles.get(name, false))
 		var fill := Color(1, 0.85, 0.3, 0.55) if held else Color(0, 0, 0, 0.35)
 		draw_circle(b.pos, b.radius, fill)
 		draw_arc(b.pos, b.radius, 0, TAU, 40, Color(1, 1, 1, 0.65), 3.0)
-		var w := font.get_string_size(b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
-		draw_string(font, b.pos + Vector2(-w / 2.0, 6), b.label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
+		var text: String = b.label
+		if name == "stance" and player:
+			text = ["HIGH", "MID", "LOW"][player.stance]
+		elif name == "lock" and player and player.lock_target:
+			fill = Color(1, 0.3, 0.25, 0.55)
+			draw_circle(b.pos, b.radius, fill)
+		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+		draw_string(font, b.pos + Vector2(-w / 2.0, 6), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	# Phones held upright get a reminder
 	if s.y > s.x:
 		draw_rect(Rect2(Vector2.ZERO, s), Color(0, 0, 0, 0.75))

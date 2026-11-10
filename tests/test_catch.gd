@@ -2,6 +2,8 @@ extends SceneTree
 ## Plays the core loop automatically and checks it works.
 ## Run: godot --headless --path . -s res://tests/test_catch.gd
 
+const Fighter := preload("res://scripts/fighter.gd")
+
 var failures := 0
 
 
@@ -10,154 +12,191 @@ func _initialize() -> void:
 
 
 func _run() -> void:
+	Fighter.hitstop_enabled = false
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await _frames(5)
 
 	var player = main.player
-	var ss: Array = get_nodes_in_group("soldiers")
-	_check(ss.size() == 5, "5 soldiers spawned")
-	for s in ss:
-		_freeze(s)
+	var city = main.city
+	var es: Array = get_nodes_in_group("enemies")
+	_check(es.size() == 3, "3 enemy mechs spawned")
+	_check(city.buildings.size() > 25, "City built (%d buildings)" % city.buildings.size())
+	_check(player.rig.global_transform.basis.get_scale().y > 3.0, "Mech is giant-sized")
+	for e in es:
+		_freeze(e)
 
-	# --- 1. Stealth takedown: creep up behind one and grab him.
-	var s2 = ss[2]
-	Input.action_press("crouch")
-	player.global_position = s2.global_position + Vector3(0, 0, -1.6)
-	player.visual.rotation.y = 0.0
-	await _frames(30)
-	_check(s2.state == s2.State.PATROL, "Soldier doesn't notice the mech creeping up behind him")
-	player.grab()
-	_check(s2.is_held() and player.hold_needed == player.TAPS_UNAWARE, "Sneak-grab: he's lifted up and needs only a few taps")
-	var start_pos: Vector3 = player.global_position
-	Input.action_press("move_forward")
-	await _frames(15)
-	Input.action_release("move_forward")
-	_check(player.global_position.distance_to(start_pos) < 0.3, "You can't walk away while holding one")
-	await _takedown(player)
-	_check(s2.is_down(), "Tapping puts him out")
-	_check(main.caught == 1, "Counter goes up")
-	await _frames(60)
-	_check(is_instance_valid(s2) and s2.is_down(), "He stays down in the snow")
-	Input.action_release("crouch")
-	await _frames(5)
+	# --- 1. Backstab: sneak up behind an unaware mech, one cut.
+	var e0 = es[0]
+	_place_behind(player, e0, 7.0)
+	await _frames(2)
+	_check(e0.is_unaware(), "Enemy hasn't noticed you behind him")
+	player.set_stance(player.Stance.MID)
+	player.start_swing()
+	await _swing_done(player)
+	_check(e0.dead, "Cut from behind: one hit takes him down")
+	_check(main.downed == 1, "Counter goes up")
 
-	# --- 2. Stop squeezing and he breaks free, angry.
-	var s3 = ss[3]
-	player.global_position = s3.global_position + Vector3(0, 0, -1.6)
-	player.visual.rotation.y = 0.0
-	await _frames(3)
-	player.grab()
-	_check(s3.is_held(), "Grab another one")
-	player.grab()
-	await _frames(int(player.BREAK_TIME * 60) + 20)
-	_check(not s3.is_held() and s3.is_fighting(), "Stop tapping: he breaks free and fights")
-	_check(player.holding == null, "...and you can move again")
-	_reset_soldier(s3)
-
-	# --- 3. Getting spotted starts a fight.
-	var s1 = ss[1]
-	player.global_position = s1.global_position + Vector3(0, 0, 5)
+	# --- 2. Seen from the front: suspicious, then a duel.
+	var e1 = es[1]
+	e1.frozen = false
+	_place_front(player, e1, 25.0)
 	await _frames(10)
-	_check(s1.state == s1.State.SUSPICIOUS, "Soldier gets suspicious when he sees you")
-	await _frames(60)
-	_check(s1.is_fighting(), "Spotted: he comes at you")
-	# He closes in and winds up a swing. Stand there and you get hit.
+	_check(e1.state == e1.State.SUSPICIOUS or e1.state == e1.State.DUEL, "He sees you and gets suspicious")
+	await _frames(120)
+	_check(e1.is_dueling(), "Spotted: he squares up for a duel")
+	await _frames(2)
+	_check(player.lock_target == e1, "Your mech locks on to him")
+	e1.frozen = true
+	e1.velocity = Vector3.ZERO
+
+	# --- 3. Guard blocks MID and LOW; HIGH breaks it.
+	_reset(e1)
+	e1.state = e1.State.DUEL
+	_place_front(player, e1, 8.0)
+	await _frames(2)
+	e1.guarding = true
+	player.set_stance(player.Stance.MID)
+	player.start_swing()
+	await _swing_done(player)
+	_check(e1.hp == e1.MAX_HP and player.stagger > 0.0, "Guard blocks a MID cut and you recoil")
+	await _frames(40)
+	_reset(e1)
+	e1.state = e1.State.DUEL
+	e1.guarding = true
+	player.set_stance(player.Stance.HIGH)
+	player.start_swing()
+	await _swing_done(player)
+	_check(e1.hp == e1.MAX_HP and e1.stagger > 0.0 and not e1.guarding, "HIGH cut smashes through his guard (guard break)")
+	await _frames(70)
+
+	# --- 4. LOW cripples, MID finishes.
+	_reset(e1)
+	e1.state = e1.State.DUEL
+	_place_front(player, e1, 8.0)
+	await _frames(2)
+	player.set_stance(player.Stance.LOW)
+	player.start_swing()
+	await _swing_done(player)
+	_check(e1.crippled and e1.hp == e1.MAX_HP - 1, "LOW cut cripples his leg")
+	await _frames(40)
+	e1.stagger = 0.0
+	_place_front(player, e1, 8.0)   # step back in after knocking him back
+	await _frames(2)
+	player.set_stance(player.Stance.MID)
+	player.start_swing()
+	await _swing_done(player)
+	_check(e1.dead, "Follow up with MID: he's down")
+
+	# --- 5. Two blades at once clash.
+	var e2 = es[2]
+	_reset(e2)
+	e2.state = e2.State.DUEL
+	_place_front(player, e2, 8.0)
+	await _frames(2)
+	e2.swing = e2.SWING_STRIKE
+	var r: String = e2.receive_strike(player, player.Stance.MID)
+	_check(r == "clash" and e2.hp == e2.MAX_HP, "Strikes landing together clash")
+	await _frames(40)
+
+	# --- 6. His swing hits you if you stand there; guard blocks it.
+	_reset(e2)
+	e2.state = e2.State.DUEL
+	player.stagger = 0.0
 	var hp0: int = player.hp
-	var wound_up := false
-	for i in 200:
-		await physics_frame
-		if s1.is_winding_up():
-			wound_up = true
-		if player.hp < hp0:
+	e2.set_stance(e2.Stance.MID)
+	e2.start_swing()
+	await _swing_done(e2)
+	_check(player.hp == hp0 - 2, "His MID cut hits you for 2")
+	await _frames(40)
+	player.stagger = 0.0
+	e2.stagger = 0.0
+	_place_front(player, e2, 8.0)
+	Input.action_press("guard")
+	await _frames(2)
+	e2.start_swing()
+	await _swing_done(e2)
+	Input.action_release("guard")
+	_check(player.hp == hp0 - 2 and e2.stagger > 0.0, "Holding guard blocks it and he recoils")
+	await _frames(40)
+
+	# --- 7. Stance switching.
+	player.set_stance(player.Stance.MID)
+	Input.action_press("stance_cycle")
+	await _frames(2)
+	Input.action_release("stance_cycle")
+	_check(player.stance == player.Stance.HIGH, "Stance button cycles MID -> HIGH")
+	Input.action_press("stance_low")
+	await _frames(2)
+	Input.action_release("stance_low")
+	_check(player.stance == player.Stance.LOW, "D-pad down picks LOW")
+
+	# --- 8. Destruction: your sword cuts through a building.
+	var b: Node3D = null
+	for cand in city.buildings:
+		if cand.global_position.distance_to(e2.global_position) > 30.0:
+			b = cand
 			break
-	_check(wound_up, "He telegraphs his swing (baton raised)")
-	_check(player.hp == hp0 - 1, "Standing in range: the baton hits you")
+	var half: Vector3 = b.get_meta("half")
+	player.global_position = Vector3(b.global_position.x, 0.2, b.global_position.z + half.z + 6.0)
+	player.rig.rotation.y = PI
+	player.lock_enabled = false
+	player.lock_target = null
+	await _frames(3)
+	var n0: int = city.buildings.size()
+	player.set_stance(player.Stance.MID)
+	player.start_swing()
+	await _swing_done(player)
+	_check(city.buildings.size() < n0 and not is_instance_valid(b) or b.is_queued_for_deletion(), "Sword cut brings a building down")
+	await _frames(5)
+	_check(city.debris.size() > 3, "It collapses into chunks (%d)" % city.debris.size())
 
-	# --- 4. Brawl: punch staggers, grab a staggered soldier to throw him.
-	await _frames(int(player.HURT_TIME * 60) + 5)
-	_face(player, s1)
-	player.global_position = s1.global_position - player._forward() * 1.6
-	await _frames(1)
-	player.grab()
-	_check(s1.is_fighting() and not s1.is_held(), "Can't grab a soldier who's swinging at you")
-	await _frames(int(player.GRAB_COOLDOWN * 60) + 2)
-	var shp: int = s1.hp
-	_face(player, s1)
-	player.punch()
-	await _frames(int(player.PUNCH_HIT_AT * 60) + 3)
-	_check(s1.hp == shp - 1 and s1.is_staggered(), "Punch lands: he staggers")
-	await _frames(int(player.PUNCH_TIME * 60))
-	_face(player, s1)
-	player.global_position = s1.global_position - player._forward() * 1.5
-	await _frames(1)
-	player.grab()
-	_check(s1.state == s1.State.THROWN, "Grab a staggered soldier: he gets thrown")
-	await _frames(90)
-	_check(s1.is_down(), "Punch + throw puts him down")
-	_check(main.caught == 2, "Brawl takedowns count too")
+	# --- 9. Charging into a low building smashes through it; tall ones hold.
+	var low: Node3D = null
+	var tall: Node3D = null
+	for cand in city.buildings:
+		var hh: float = cand.get_meta("half").y * 2.0
+		if hh < 9.0 and low == null:
+			low = cand
+		if hh > 16.0 and tall == null:
+			tall = cand
+	_check(city.smash(low, low.global_position + Vector3(0, 0, 20), 12.0), "Running into a low shop smashes it")
+	_check(tall == null or not city.smash(tall, tall.global_position + Vector3(0, 0, 20), 12.0), "Tall buildings need the sword")
 
-	# --- 5. Sound.
-	var s4 = ss[4]
-	var s0 = ss[0]
-	player.global_position = s4.global_position + Vector3(0, 0, -5)
-	await _frames(3)
-	player.make_noise(player.SNEAK_NOISE)
-	await _frames(3)
-	_check(s4.state == s4.State.PATROL, "Quiet steps 5m away go unheard")
-	player.global_position = s0.global_position + Vector3(0, 0, -5)
-	await _frames(3)
-	player.make_noise(player.RUN_NOISE)
-	await _frames(3)
-	_check(s0.state == s0.State.INVESTIGATE, "Heavy stomps 5m away get him investigating")
-	_check(s0.awareness < 1.0, "Hearing alone doesn't spot you")
-	_reset_soldier(s0)
+	# --- 10. Props go flying when a mech walks into them.
+	var prop: RigidBody3D = city.props[0]
+	_check(prop.freeze, "Props stand still until touched")
+	var pushed: int = city.push_props(prop.global_position + Vector3(1, 0, 0), 1.8, Vector3(-6, 0, 0))
+	_check(pushed > 0 and not prop.freeze, "Walking into a prop knocks it flying")
 
-	# --- 6. Jumping.
-	player.global_position = Vector3(0, 0.1, 0)
-	await _frames(10)
-	Input.action_press("jump")
+	# --- 11. Hearing: loud stomps get investigated, collapses carry far.
+	var listener = e2
+	_reset(listener)
+	listener.state = listener.State.PATROL
+	listener.hear_noise(listener.global_position + Vector3(30, 0, 0), player.WALK_NOISE, player)
+	_check(listener.state == listener.State.PATROL, "Quiet walking 30 m away goes unheard")
+	listener.hear_noise(listener.global_position + Vector3(30, 0, 0), player.RUN_NOISE, player)
+	_check(listener.state == listener.State.INVESTIGATE, "Running 30 m away gets him investigating")
+
+	# --- 12. Dash.
+	player.global_position = Vector3(-72, 0.2, 0)
+	player.velocity = Vector3.ZERO
+	player.stagger = 0.0
+	await _frames(40)
+	player.dash_cd = 0.0
+	var p0: Vector3 = player.global_position
+	player.dash()
+	await _frames(20)
+	_check(player.global_position.distance_to(p0) > 4.0, "Dash bursts you across the street")
+
+	# --- 13. Lose all your armor: defeated.
+	while not player.dead:
+		player.stagger = 0.0
+		player.receive_strike(e2, player.Stance.HIGH)
 	await _frames(2)
-	Input.action_release("jump")
-	var peak := 0.0
-	for i in 30:
-		await physics_frame
-		peak = max(peak, player.global_position.y)
-	_check(peak > 0.8, "Mech can jump")
+	_check(player.dead and main.game_over, "Armor gone: DEFEATED")
 
-	# --- 7. Light and dark.
-	_check(not player.flashlight_on, "Head lamp starts off (stealth first)")
-	player.toggle_flashlight()
-	var lit_range: float = s4._sight_range()
-	player.toggle_flashlight()
-	_check(not player.flashlight_on, "Head lamp toggles off")
-	player.global_position = Vector3(0, 0.1, 0)
-	await _frames(2)
-	_check(not player.is_lit(), "In the dark with the lamp off: not lit")
-	_check(s4._sight_range() < lit_range * 0.6, "Soldiers see you half as far in the dark")
-	player.global_position = main.LAMP_SPOTS[0] + Vector3(1, 0.1, 0)
-	await _frames(2)
-	_check(player.is_lit(), "Standing in lamplight lights you up even with the lamp off")
-	player.toggle_flashlight()
-	_check(player.flashlight_on and player.is_lit(), "Head lamp back on")
-
-	# --- 8. Lose a fighter: out of sight long enough and he goes back to searching.
-	player.global_position = Vector3(0, 0.1, 0)
-	await _frames(3)
-	s4._start_fight()
-	player.global_position = Vector3(-22, 0.1, 22) if s4.global_position.x > 0 else Vector3(22, 0.1, -22)
-	s4.lose_timer = 0.05
-	await _frames(10)
-	_check(not s4.is_fighting() and s4.state == s4.State.INVESTIGATE, "Lose him and he goes back to searching")
-
-	# --- 9. Take enough hits and the mech goes down.
-	while player.hp > 0:
-		player.hurt_timer = 0.0
-		player.take_hit(player.global_position + Vector3(1, 0, 0))
-	await _frames(2)
-	_check(player.dead and main.game_over, "Armor gone: MECH DOWN")
-
-	# --- 10. Touch controls drive the same actions.
+	# --- 14. Touch controls drive the same actions.
 	var TouchScript := load("res://scripts/touch_controls.gd")
 	var t: Control = TouchScript.new()
 	t.player = player
@@ -165,65 +204,59 @@ func _run() -> void:
 	await _frames(2)
 	t._touch_down(0, Vector2(100, 600))
 	t._touch_move(0, Vector2(100 + t.STICK_RADIUS, 600))
-	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = full strength (run)")
+	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = run")
 	t._touch_move(0, Vector2(100 + t.STICK_RADIUS * 0.4, 600))
 	var st := Input.get_action_strength("move_right")
-	_check(st > 0.3 and st < 0.5, "Touch joystick: light push = partial strength (sneak)")
+	_check(st > 0.3 and st < 0.5, "Touch joystick: light push = walk")
 	t._touch_up(0)
-	_check(Input.get_action_strength("move_right") == 0.0, "Letting go stops movement")
-	t._touch_down(1, t.buttons["punch"].pos)
-	_check(Input.is_action_pressed("punch"), "Punch button works")
-	t._touch_up(1)
-	t._touch_down(1, t.buttons["crouch"].pos)
-	t._touch_up(1)
-	_check(Input.is_action_pressed("crouch"), "Crouch button toggles on")
-	t._touch_down(1, t.buttons["crouch"].pos)
-	t._touch_up(1)
-	_check(not Input.is_action_pressed("crouch"), "...and off")
-	var y0: float = player.yaw
-	t._touch_down(2, Vector2(900, 300))
-	t._touch_move(2, Vector2(960, 300))
-	_check(player.yaw < y0, "Dragging on the right turns the camera")
-	t._touch_up(2)
+	for name in ["slash", "guard", "dash", "stance", "lock"]:
+		t._touch_down(1, t.buttons[name].pos)
+		var ok := Input.is_action_pressed(t.buttons[name].action)
+		t._touch_up(1)
+		_check(ok, "Touch %s button works" % name.to_upper())
 
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)
 
 
-## Stops him wandering and glancing around, facing +Z, so tests are repeatable.
-func _freeze(s) -> void:
-	s.scan = false
-	s.wait_timer = 9999.0
-	s.heading = 0.0
-	s.visual.rotation.y = 0.0
-	s.velocity = Vector3.ZERO
+func _freeze(e) -> void:
+	e.frozen = true
+	e.velocity = Vector3.ZERO
 
 
-## Puts a soldier back to calm patrol, standing still.
-func _reset_soldier(s) -> void:
-	s.state = s.State.PATROL
-	s.awareness = 0.0
-	s.stagger = 0.0
-	s.windup = 0.0
-	s.hp = s.MAX_HP
-	_freeze(s)
+func _reset(e) -> void:
+	e.hp = e.MAX_HP
+	e.crippled = false
+	e.stagger = 0.0
+	e.guarding = false
+	e.swing = e.SWING_NONE
+	e.frozen = true
+	e.velocity = Vector3.ZERO
 
 
-func _face(player, s) -> void:
-	var to: Vector3 = s.global_position - player.global_position
-	player.visual.rotation.y = atan2(to.x, to.z)
+## Player stands `dist` behind the enemy, both facing the same way.
+func _place_behind(player, e, dist: float) -> void:
+	e.heading = 0.0
+	e.rig.rotation.y = 0.0
+	player.global_position = e.global_position + Vector3(0, 0, -dist)
+	player.rig.rotation.y = 0.0
+	player.velocity = Vector3.ZERO
 
 
-## Grabs (if not already holding) and taps until he's out. Returns taps used.
-func _takedown(player) -> int:
-	var taps := 0
-	if player.holding == null:
-		player.grab()
-	while player.holding != null and taps < 30:
+## Player and enemy face each other, `dist` apart.
+func _place_front(player, e, dist: float) -> void:
+	e.heading = PI
+	e.rig.rotation.y = PI
+	player.global_position = e.global_position + Vector3(0, 0, -dist)
+	player.rig.rotation.y = 0.0
+	player.velocity = Vector3.ZERO
+
+
+func _swing_done(f) -> void:
+	for i in 200:
 		await physics_frame
-		player.grab()
-		taps += 1
-	return taps
+		if f.swing == f.SWING_RECOVER or f.swing == f.SWING_NONE:
+			break
 
 
 func _frames(n: int) -> void:

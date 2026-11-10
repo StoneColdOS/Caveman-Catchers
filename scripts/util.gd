@@ -4,7 +4,9 @@ extends RefCounted
 ## Physics layers (bit values).
 const LAYER_WORLD := 1
 const LAYER_PLAYER := 2
-const LAYER_CAVEMAN := 4
+const LAYER_CAVEMAN := 4         # enemy mechs
+const LAYER_ENEMY := 4
+const LAYER_DEBRIS := 8          # props and rubble: never block movement or sight
 
 
 ## Art style: rubber hose (ink outlines on robots and props, extra bounce) or plain.
@@ -92,14 +94,14 @@ static func mat(color: Color, unshaded := false) -> StandardMaterial3D:
 
 
 ## PS1 surface: wobbly snapped vertices and warped (affine) pixel textures.
-static func psx(color: Color) -> ShaderMaterial:
+static func psx(color: Color, tex_scale := PIXEL_SCALE) -> ShaderMaterial:
 	if _psx_shader == null:
 		_psx_shader = load("res://shaders/psx_surface.gdshader")
 	var m := ShaderMaterial.new()
 	m.shader = _psx_shader
 	m.set_shader_parameter("albedo", color)
 	m.set_shader_parameter("tex", _pixel_texture(randi() % PIXEL_VARIANTS))
-	m.set_shader_parameter("tex_scale", PIXEL_SCALE)
+	m.set_shader_parameter("tex_scale", tex_scale)
 	return m
 
 
@@ -113,25 +115,31 @@ static func _outline() -> StandardMaterial3D:
 
 
 ## A mesh with an ink outline: a slightly bigger, inside-out black copy behind it.
-static func mesh(m: Mesh, color: Color, pos := Vector3.ZERO, outline := true) -> MeshInstance3D:
+static func mesh(m: Mesh, color: Color, pos := Vector3.ZERO, _outline_unused := true, tex_scale := PIXEL_SCALE) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
-	m = faceted(m)
-	mi.mesh = m
-	mi.material_override = psx(color) if color.a >= 1.0 else mat(color)
+	mi.mesh = faceted(m)
+	mi.material_override = psx(color, tex_scale) if color.a >= 1.0 else mat(color)
 	mi.position = pos
-	if outline and color.a >= 1.0:
-		var o := MeshInstance3D.new()
-		o.mesh = m
-		o.material_override = _outline()
-		var sz := m.get_aabb().size
-		o.scale = Vector3((sz.x + 2.0 * OUTLINE) / maxf(sz.x, 0.001),
-			(sz.y + 2.0 * OUTLINE) / maxf(sz.y, 0.001),
-			(sz.z + 2.0 * OUTLINE) / maxf(sz.z, 0.001))
-		o.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		o.visible = rubber
-		o.add_to_group("outlines")
-		mi.add_child(o)
 	return mi
+
+
+## Glowing (unshaded) mesh: neon, windows, eyes.
+static func glow(m: Mesh, color: Color, pos := Vector3.ZERO) -> MeshInstance3D:
+	var mi := MeshInstance3D.new()
+	mi.mesh = m
+	mi.material_override = mat(color, true)
+	mi.position = pos
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	return mi
+
+
+## Many boxes merged into one mesh (one draw call). parts: Array of [size, position].
+static func merged_boxes(parts: Array) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for p in parts:
+		st.append_from(box(p[0]), 0, Transform3D(Basis(), p[1]))
+	return st.commit()
 
 
 static func box(size: Vector3) -> BoxMesh:

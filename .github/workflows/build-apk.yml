@@ -1,7 +1,7 @@
 name: Build APK
 
 # Every push to main builds an Android APK and puts it on the "latest-build" release.
-# Download it on the Thor: https://github.com/StoneColdOS/caveman-catchers/releases/tag/latest-build
+# Download it on the Thor: https://github.com/StoneColdOS/mech-mania/releases/tag/latest-build
 
 on:
   push:
@@ -64,9 +64,9 @@ jobs:
         run: |
           mkdir -p export
           godot --headless --import || true
-          godot --headless --export-debug "Android" export/caveman-catchers.apk
+          godot --headless --export-debug "Android" export/mech-mania.apk
           ls -la export/
-          test -s export/caveman-catchers.apk
+          test -s export/mech-mania.apk
 
       - name: Publish to the latest-build release
         env:
@@ -74,8 +74,9 @@ jobs:
         run: |
           NOTES="Build #${{ github.run_number }} from commit ${GITHUB_SHA::7}: $(git log -1 --pretty=%s)"
           if gh release view latest-build >/dev/null 2>&1; then
-            gh release upload latest-build export/caveman-catchers.apk --clobber
+            gh release upload latest-build export/mech-mania.apk --clobber
+            gh release delete-asset latest-build caveman-catchers.apk -y || true   # old name
             gh release edit latest-build --notes "$NOTES"
           else
-            gh release create latest-build export/caveman-catchers.apk --title "Latest build" --notes "$NOTES" --latest
+            gh release create latest-build export/mech-mania.apk --title "Latest build" --notes "$NOTES" --latest
           fi

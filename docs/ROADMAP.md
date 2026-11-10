@@ -1,4 +1,4 @@
-# Roadmap (working title: Caveman Catchers)
+# Mech Mania: Roadmap
 
 The rule for this project: **prove it's fun before making it big.** Each phase ends with something playable and a gut check: "Do I actually want to keep playing this?" If the answer is no, we fix the fun before moving on, not after.
 
@@ -27,7 +27,23 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 7: PSX mechs (current)
+## Prototype 8: giant sword mechs in Tokyo (current)
+
+- [x] Renamed to Mech Mania
+- [x] Playtest of prototype 7. **Verdict:** punching felt mushy, stealth was slow, soldiers weren't a match, mech moved badly
+- [x] Mechs scaled to ~10 m; the same lanky rig is shared by the hero and the enemies
+- [x] Small night Tokyo: 3×3 blocks of shops, houses, offices and towers, neon signs, lit windows, vending machines, poles, lamps, cars, plaza in the middle
+- [x] Destruction: props fly when touched, sword cuts topple buildings, charging smashes low buildings, debris chunks and rubble, collapses alert enemies
+- [x] Bushido Blade-style swords: HIGH / MID / LOW stances, guard, guard break, clash, crippled legs, interrupts, feint by dashing
+- [x] Hit-stop, camera shake, blade trails, sparks
+- [x] Crimson enemy mechs that patrol streets, see and hear you, duel with telegraphed stance flashes, guard and back-step
+- [x] One-cut backstab on unaware enemies
+- [x] Lock-on camera that frames both mechs
+- [ ] Play it on the Thor and phone: do duels feel tense and fair? Is destruction fun or just noise?
+- [ ] Sound pass
+- [ ] Limb cutting
+
+## Prototype 7: PSX mechs (human-size, dropped)
 
 - [x] New direction: a lanky scout mech sneaking up on soldiers. Get caught and you have to fight
 - [x] Heavy PSX rendering: custom surface shader with vertex snapping and affine texture warping on everything, ground cut into 2 m tiles, screen down to 200 lines with stronger dithering and color banding

@@ -1,42 +1,45 @@
 extends Node3D
-## Builds the night-time snowy woods (heavy PSX look), the mech, the soldiers and the HUD.
-## Placeholder shapes on purpose: we're testing fun, not final art.
+## Mech Mania: builds the night-time Tokyo neighborhood (heavy PSX look), your mech,
+## the enemy mechs and the HUD.
 
 const Util := preload("res://scripts/util.gd")
 const Controls := preload("res://scripts/controls.gd")
 const PlayerScript := preload("res://scripts/player.gd")
-const SoldierScript := preload("res://scripts/soldier.gd")
+const EnemyScript := preload("res://scripts/enemy.gd")
+const CityScript := preload("res://scripts/city.gd")
+const FighterScript := preload("res://scripts/fighter.gd")
 const TouchScript := preload("res://scripts/touch_controls.gd")
 
-const ARENA := 50.0
-const LAMP_SPOTS := [Vector3(-7, 0, -5), Vector3(9, 0, 4), Vector3(-4, 0, 11), Vector3(14, 0, -14)]
-const LAMP_RADIUS := 5.0
-const SOLDIER_SPOTS := [Vector3(-10, 0, -12), Vector3(12, 0, -8), Vector3(2, 0, 14), Vector3(-15, 0, 8), Vector3(15, 0, 13)]
+const PLAYER_SPAWN := Vector3(-72, 0.2, 72)
+const ENEMY_SPAWNS := [Vector3(24, 0.2, -24), Vector3(72, 0.2, 24), Vector3(-24, 0.2, -72)]
+const STANCE_NAMES := ["HIGH", "MID", "LOW"]
 
 var player: CharacterBody3D
-var caught := 0          # soldiers put down
+var city: Node3D
+var downed := 0
+var game_over := false
 var count_label: Label
 var mode_label: Label
 var alert_label: Label
-var game_over := false
+var stance_label: Label
+var result_label: Label
 var hint_label: Label
-var hold_bar: ProgressBar
-var armor_bar: ProgressBar
-var snow_emitter: CPUParticles3D
-var ps1: ColorRect
 var message_label: Label
-var rng := RandomNumberGenerator.new()
+var armor_bar: ProgressBar
+var result_timer := 0.0
 
 
 func _ready() -> void:
 	Controls.setup()
+	Engine.time_scale = 1.0
 	Util.reset_style_cache()
-	rng.seed = 7
 	_build_environment()
-	_build_ground()
-	_build_cover()
+	city = Node3D.new()
+	city.set_script(CityScript)
+	add_child(city)
+	city.build()
 	_spawn_player()
-	_spawn_soldiers()
+	_spawn_enemies()
 	_build_ps1()
 	_build_hud()
 	_build_debug()
@@ -46,38 +49,212 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("restart"):
+		Engine.time_scale = 1.0
 		get_tree().reload_current_scene()
+		return
 	_update_debug()
-	_update_alert()
-	if snow_emitter and player:
-		snow_emitter.global_position = player.global_position + Vector3(0, 9, 0)
-	if player and mode_label:
-		mode_label.text = player.move_mode + ("   |   LIT UP" if player.is_lit() else "   |   in the dark")
-		var loud: bool = player.move_mode.begins_with("Running")
-		var silent: bool = player.move_mode.contains("silent")
-		mode_label.modulate = Color(1, 0.45, 0.35) if loud else (Color(0.6, 1, 0.7) if silent else Color.WHITE)
+	_update_hud_live(delta)
 
 
-## PS1-style screen: low resolution with chunky pixels and a little color dithering.
+func _build_environment() -> void:
+	# Tokyo night: deep blue-violet sky, hazy fog, neon does the rest
+	var env := Environment.new()
+	env.background_mode = Environment.BG_COLOR
+	env.background_color = Color(0.05, 0.045, 0.1)
+	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+	env.ambient_light_color = Color(0.45, 0.45, 0.65)
+	env.ambient_light_energy = 0.35
+	env.fog_enabled = true
+	env.fog_light_color = Color(0.1, 0.08, 0.16)
+	env.fog_density = 0.012
+	var we := WorldEnvironment.new()
+	we.environment = env
+	add_child(we)
+
+	var moon := DirectionalLight3D.new()
+	moon.rotation_degrees = Vector3(-50, 35, 0)
+	moon.light_energy = 0.4
+	moon.light_color = Color(0.6, 0.65, 0.95)
+	moon.shadow_enabled = true
+	moon.directional_shadow_max_distance = 90.0
+	add_child(moon)
+
+	# A few colored neon glows at street crossings
+	var colors := [Color(1.0, 0.3, 0.6), Color(0.2, 0.8, 1.0), Color(1.0, 0.75, 0.3), Color(0.5, 1.0, 0.5)]
+	var spots := [Vector3(-24, 6, -24), Vector3(24, 6, 24), Vector3(-24, 6, 24), Vector3(24, 6, -24), Vector3(-72, 6, 72), Vector3(72, 6, -72)]
+	for i in spots.size():
+		var l := OmniLight3D.new()
+		l.position = spots[i]
+		l.light_color = colors[i % colors.size()]
+		l.light_energy = 2.0
+		l.omni_range = 26.0
+		l.omni_attenuation = 1.2
+		add_child(l)
+
+
+## PS1-style screen: low resolution with chunky pixels and color dithering.
 func _build_ps1() -> void:
 	var layer := CanvasLayer.new()
 	layer.layer = 0
 	add_child(layer)
-	ps1 = ColorRect.new()
-	ps1.set_anchors_preset(Control.PRESET_FULL_RECT)
-	ps1.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var rect := ColorRect.new()
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/ps1.gdshader")
-	ps1.material = sm
-	layer.add_child(ps1)
+	rect.material = sm
+	layer.add_child(rect)
 
 
-## Is this spot inside a lamp's pool of light?
-func in_lamp_light(pos: Vector3) -> bool:
-	for l in LAMP_SPOTS:
-		if Vector2(pos.x - l.x, pos.z - l.z).length() < LAMP_RADIUS:
-			return true
-	return false
+func _spawn_player() -> void:
+	player = CharacterBody3D.new()
+	player.set_script(PlayerScript)
+	player.name = "Player"
+	player.position = PLAYER_SPAWN
+	add_child(player)
+	player.city = city
+	player.rig.rotation.y = PI * 0.75   # facing into the city
+	player.yaw = player.rig.rotation.y + PI
+	player.killed.connect(_on_player_killed)
+
+
+func _spawn_enemies() -> void:
+	for spot in ENEMY_SPAWNS:
+		var e := CharacterBody3D.new()
+		e.set_script(EnemyScript)
+		e.position = spot
+		add_child(e)
+		e.city = city
+		e.killed.connect(_on_enemy_killed)
+
+
+func _on_enemy_killed(_by) -> void:
+	downed += 1
+	if downed >= ENEMY_SPAWNS.size() and not player.dead:
+		game_over = true
+		message_label.text = "CITY CLEARED\nPress Start to play again"
+		message_label.modulate = Color(1, 0.95, 0.7)
+	_update_count()
+
+
+func _on_player_killed(_by) -> void:
+	game_over = true
+	message_label.text = "DEFEATED\nPress Start to try again"
+	message_label.modulate = Color(1, 0.35, 0.3)
+
+
+# --- HUD
+
+func _label(size: int, pos: Vector2, parent: Node) -> Label:
+	var l := Label.new()
+	l.position = pos
+	l.add_theme_font_size_override("font_size", size)
+	l.add_theme_constant_override("outline_size", size / 4)
+	l.add_theme_color_override("font_outline_color", Color.BLACK)
+	parent.add_child(l)
+	return l
+
+
+func _build_hud() -> void:
+	var layer := CanvasLayer.new()
+	add_child(layer)
+	count_label = _label(34, Vector2(24, 18), layer)
+	mode_label = _label(24, Vector2(24, 62), layer)
+	var armor_text := _label(20, Vector2(24, 100), layer)
+	armor_text.text = "ARMOR"
+	armor_bar = ProgressBar.new()
+	armor_bar.max_value = player.MAX_HP
+	armor_bar.value = player.MAX_HP
+	armor_bar.show_percentage = false
+	armor_bar.position = Vector2(110, 104)
+	armor_bar.size = Vector2(220, 20)
+	var fill := StyleBoxFlat.new()
+	fill.bg_color = Color(0.85, 0.75, 0.3)
+	armor_bar.add_theme_stylebox_override("fill", fill)
+	var bg := StyleBoxFlat.new()
+	bg.bg_color = Color(0, 0, 0, 0.6)
+	armor_bar.add_theme_stylebox_override("background", bg)
+	layer.add_child(armor_bar)
+	stance_label = _label(30, Vector2(24, 136), layer)
+
+	alert_label = Label.new()
+	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	alert_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	alert_label.offset_top = 70
+	alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	alert_label.add_theme_font_size_override("font_size", 40)
+	alert_label.add_theme_constant_override("outline_size", 10)
+	alert_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(alert_label)
+
+	result_label = Label.new()
+	result_label.set_anchors_preset(Control.PRESET_CENTER)
+	result_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	result_label.offset_top = -140
+	result_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	result_label.add_theme_font_size_override("font_size", 46)
+	result_label.add_theme_constant_override("outline_size", 12)
+	result_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(result_label)
+
+	hint_label = Label.new()
+	hint_label.text = "Move: L-stick  Slash: X/R2  Guard: L1/L2  Dash: A  Stance: Y or D-pad  Lock: R1  Restart: Start"
+	hint_label.anchor_top = 1.0
+	hint_label.anchor_bottom = 1.0
+	hint_label.offset_top = -44
+	hint_label.offset_left = 24
+	hint_label.add_theme_font_size_override("font_size", 20)
+	hint_label.add_theme_constant_override("outline_size", 6)
+	hint_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(hint_label)
+
+	message_label = Label.new()
+	message_label.set_anchors_preset(Control.PRESET_CENTER)
+	message_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	message_label.grow_vertical = Control.GROW_DIRECTION_BOTH
+	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	message_label.add_theme_font_size_override("font_size", 52)
+	message_label.add_theme_constant_override("outline_size", 12)
+	message_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	layer.add_child(message_label)
+	_update_count()
+
+
+func _update_count() -> void:
+	count_label.text = "Mechs down: %d / %d" % [downed, ENEMY_SPAWNS.size()]
+
+
+func _update_hud_live(delta: float) -> void:
+	if player == null or armor_bar == null:
+		return
+	armor_bar.value = player.hp
+	mode_label.text = player.move_mode + ("   |   CRIPPLED" if player.crippled else "")
+	mode_label.modulate = Color(1, 0.45, 0.35) if player.move_mode.begins_with("Running") else Color.WHITE
+	var parts: PackedStringArray = []
+	for i in 3:
+		parts.append("[%s]" % STANCE_NAMES[i] if i == player.stance else STANCE_NAMES[i])
+	stance_label.text = "STANCE  " + "  ".join(parts) + ("   LOCK" if player.lock_target else "")
+
+	var dueling := false
+	for e in get_tree().get_nodes_in_group("enemies"):
+		if e.is_dueling():
+			dueling = true
+	if dueling and not player.dead:
+		alert_label.text = "! DUEL !"
+		alert_label.modulate = Color(1, 0.25, 0.2) if Time.get_ticks_msec() % 600 < 400 else Color(1, 0.6, 0.5)
+	else:
+		alert_label.text = ""
+
+	# Flash what your last strike did
+	if player.last_result != "":
+		var words := {"hit": "HIT", "kill": "CUT DOWN", "backstab": "ASSASSINATED", "block": "BLOCKED", "break": "GUARD BREAK", "clash": "CLASH"}
+		result_label.text = words.get(player.last_result, "")
+		result_label.modulate = Color(1, 0.85, 0.4) if player.last_result in ["kill", "backstab", "break"] else Color.WHITE
+		player.last_result = ""
+		result_timer = 1.0
+	result_timer -= delta
+	if result_timer <= 0.0:
+		result_label.text = ""
 
 
 ## Phones and tablets get on-screen controls (?touch in the web address forces them on).
@@ -123,7 +300,6 @@ func _build_debug() -> void:
 	layer.add_child(debug_label)
 
 
-## Remembers the last raw input event of any kind, so we can see what the Thor sends.
 func _input(event: InputEvent) -> void:
 	if event is InputEventJoypadMotion and abs(event.axis_value) < 0.3:
 		return
@@ -142,347 +318,10 @@ func _update_debug() -> void:
 		lines.append("NO CONTROLLER DETECTED")
 	for id in pads:
 		lines.append("Pad %d: %s" % [id, Input.get_joy_name(id)])
-	var move := Input.get_vector("move_left", "move_right", "move_forward", "move_back")
-	var look := Input.get_vector("look_left", "look_right", "look_up", "look_down")
-	lines.append("Move (%.1f, %.1f)  Look (%.1f, %.1f)" % [move.x, move.y, look.x, look.y])
 	var held: PackedStringArray = []
-	for a in ["crouch", "net", "punch", "restart"]:
+	for a in ["slash", "guard", "dash", "stance_cycle", "lock", "restart"]:
 		if Input.is_action_pressed(a):
 			held.append(a)
 	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))
 	lines.append("Last input: " + last_raw)
 	debug_label.text = "\n".join(lines)
-
-
-func _build_environment() -> void:
-	# Night: near-black sky, cold dim ambient, thick dark fog that swallows the distance
-	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.02, 0.025, 0.04)
-	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.3, 0.36, 0.5)
-	env.ambient_light_energy = 0.1
-	env.fog_enabled = true
-	env.fog_light_color = Color(0.03, 0.035, 0.05)
-	env.fog_density = 0.075
-	var we := WorldEnvironment.new()
-	we.environment = env
-	add_child(we)
-
-	# Weak blue moonlight
-	var moon := DirectionalLight3D.new()
-	moon.rotation_degrees = Vector3(-55, 30, 0)
-	moon.light_energy = 0.14
-	moon.light_color = Color(0.55, 0.65, 0.95)
-	moon.shadow_enabled = true
-	add_child(moon)
-
-
-func _build_ground() -> void:
-	var ground := _static_box(Vector3(ARENA + 20, 1, ARENA + 20), Vector3(0, -0.5, 0), Color(0.8, 0.84, 0.9), false)  # snow
-	# Cut the ground into 2 m tiles like a PS1 level would, so textures warp per tile
-	var plane := PlaneMesh.new()
-	plane.size = Vector2(ARENA + 20, ARENA + 20)
-	plane.subdivide_width = 34
-	plane.subdivide_depth = 34
-	ground.add_child(Util.mesh(plane, Color(0.8, 0.84, 0.9), Vector3(0, 0.5, 0), false))
-	# Dense dark pines all around the edge (the fog hides how fake it is)
-	var h := ARENA / 2.0
-	var wall := Color(0.04, 0.07, 0.05)
-	_static_box(Vector3(ARENA + 4, 8, 2), Vector3(0, 4, -h - 1), wall)
-	_static_box(Vector3(ARENA + 4, 8, 2), Vector3(0, 4, h + 1), wall)
-	_static_box(Vector3(2, 8, ARENA), Vector3(-h - 1, 4, 0), wall)
-	_static_box(Vector3(2, 8, ARENA), Vector3(h + 1, 4, 0), wall)
-
-
-## Rocks, pines and lamp posts. Rocks and trees block robot eyesight; lamps light you up.
-func _build_cover() -> void:
-	for i in 14:
-		var p := _random_spot()
-		var size := Vector3(rng.randf_range(2.0, 4.5), rng.randf_range(1.8, 3.4), rng.randf_range(2.0, 4.5))
-		var rock := _static_box(size, p + Vector3(0, size.y / 2.0, 0), Color(0.3, 0.3, 0.32))
-		rock.rotation.y = rng.randf() * TAU
-		rock.add_child(Util.mesh(Util.box(Vector3(size.x * 0.92, 0.12, size.z * 0.92)), Color(0.85, 0.88, 0.93), Vector3(0, size.y / 2.0 + 0.05, 0)))  # snow cap
-	for i in 5:
-		_container(_random_spot())
-	for i in 22:
-		_pine(_random_spot())
-	for spot in LAMP_SPOTS:
-		_lamp(spot)
-	_snowfall()
-
-
-## A rusted shipping container: mech-sized cover. Crouch behind it and nobody sees you.
-func _container(p: Vector3) -> void:
-	var colors := [Color(0.42, 0.16, 0.1), Color(0.18, 0.28, 0.32), Color(0.32, 0.34, 0.22)]
-	var c: Color = colors[rng.randi() % colors.size()]
-	var size := Vector3(2.5, 2.6, 6.0)
-	var box := _static_box(size, p + Vector3(0, size.y / 2.0, 0), c)
-	box.rotation.y = rng.randf() * TAU
-	for i in 7:
-		var z := -2.6 + i * 0.87
-		for side in [-1.0, 1.0]:
-			box.add_child(Util.mesh(Util.box(Vector3(0.08, size.y - 0.2, 0.18)), c.darkened(0.2), Vector3(size.x / 2.0 * side, 0, z), false))  # ribs
-	box.add_child(Util.mesh(Util.box(Vector3(size.x * 0.95, 0.1, size.z * 0.95)), Color(0.85, 0.88, 0.93), Vector3(0, size.y / 2.0 + 0.05, 0), false))  # snow
-
-
-func _pine(p: Vector3) -> void:
-	var body := StaticBody3D.new()
-	body.collision_layer = Util.LAYER_WORLD
-	body.position = p
-	add_child(body)
-	var height := rng.randf_range(6.5, 10.0)
-	var shape := CollisionShape3D.new()
-	var cyl_shape := CylinderShape3D.new()
-	cyl_shape.radius = 0.4
-	cyl_shape.height = height
-	shape.shape = cyl_shape
-	shape.position.y = height / 2.0
-	body.add_child(shape)
-	var trunk := CylinderMesh.new()
-	trunk.top_radius = 0.18
-	trunk.bottom_radius = 0.3
-	trunk.height = height * 0.35
-	trunk.radial_segments = 6
-	body.add_child(Util.mesh(trunk, Color(0.2, 0.14, 0.1), Vector3(0, height * 0.175, 0)))
-	# Three stacked tiers of branches, each dusted with snow
-	for tier in 3:
-		var r := 1.8 - tier * 0.5
-		var tier_h := height * 0.38
-		var y := height * 0.25 + tier * height * 0.22
-		var cone := CylinderMesh.new()
-		cone.top_radius = 0.0
-		cone.bottom_radius = r
-		cone.height = tier_h
-		cone.radial_segments = 7
-		body.add_child(Util.mesh(cone, Color(0.07, 0.15, 0.1), Vector3(0, y + tier_h / 2.0, 0)))
-		var snow := CylinderMesh.new()
-		snow.top_radius = 0.0
-		snow.bottom_radius = r * 0.55
-		snow.height = tier_h * 0.45
-		snow.radial_segments = 7
-		body.add_child(Util.mesh(snow, Color(0.82, 0.86, 0.92), Vector3(0, y + tier_h * 0.8, 0)))
-
-
-## A lamp post with a warm pool of light. Standing in it lets robots see you from far away.
-func _lamp(p: Vector3) -> void:
-	var post := _static_box(Vector3(0.15, 3.2, 0.15), p + Vector3(0, 1.6, 0), Color(0.15, 0.15, 0.16))
-	post.add_to_group("lamps")
-	var head := MeshInstance3D.new()
-	head.mesh = Util.box(Vector3(0.4, 0.3, 0.4))
-	head.material_override = Util.mat(Color(1.0, 0.82, 0.5), true)
-	head.position = Vector3(0, 1.7, 0)
-	post.add_child(head)
-	var light := OmniLight3D.new()
-	light.position = Vector3(0, 1.5, 0)
-	light.light_color = Color(1.0, 0.75, 0.45)
-	light.light_energy = 3.5
-	light.omni_range = LAMP_RADIUS + 2.5
-	light.omni_attenuation = 1.2
-	post.add_child(light)
-
-
-## Snow falling around the player.
-func _snowfall() -> void:
-	var snow := CPUParticles3D.new()
-	snow.amount = 450
-	snow.lifetime = 6.0
-	snow.preprocess = 6.0
-	snow.local_coords = false
-	snow.emission_shape = CPUParticles3D.EMISSION_SHAPE_BOX
-	snow.emission_box_extents = Vector3(14, 0.5, 14)
-	snow.direction = Vector3(0.15, -1, 0)
-	snow.spread = 12.0
-	snow.gravity = Vector3(0, -0.6, 0)
-	snow.initial_velocity_min = 0.8
-	snow.initial_velocity_max = 1.4
-	var flake := QuadMesh.new()
-	flake.size = Vector2(0.05, 0.05)
-	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.billboard_mode = BaseMaterial3D.BILLBOARD_ENABLED
-	m.albedo_color = Color(0.9, 0.93, 1.0)
-	flake.material = m
-	snow.mesh = flake
-	snow.position = Vector3(0, 9, 0)
-	snow_emitter = snow
-	add_child(snow)
-
-
-func _random_spot() -> Vector3:
-	# Keep the middle open near the player start, and away from walls.
-	while true:
-		var p := Vector3(rng.randf_range(-21, 21), 0, rng.randf_range(-21, 21))
-		var clear := p.length() > 5.0
-		for l in LAMP_SPOTS:
-			if p.distance_to(l) < 3.0:
-				clear = false
-		if clear:
-			return p
-	return Vector3.ZERO
-
-
-func _static_box(size: Vector3, pos: Vector3, color: Color, visible_mesh := true) -> StaticBody3D:
-	var body := StaticBody3D.new()
-	body.collision_layer = Util.LAYER_WORLD
-	body.position = pos
-	var shape := CollisionShape3D.new()
-	var box := BoxShape3D.new()
-	box.size = size
-	shape.shape = box
-	body.add_child(shape)
-	if visible_mesh:
-		body.add_child(Util.mesh(Util.box(size), color))
-	add_child(body)
-	return body
-
-
-func _spawn_player() -> void:
-	player = CharacterBody3D.new()
-	player.set_script(PlayerScript)
-	player.name = "Player"
-	player.position = Vector3(0, 0.1, 0)
-	add_child(player)
-	player.subdued_one.connect(_on_caught)
-	player.died.connect(_on_died)
-
-
-func _spawn_soldiers() -> void:
-	for spot in SOLDIER_SPOTS:
-		var g := CharacterBody3D.new()
-		g.set_script(SoldierScript)
-		g.position = spot + Vector3(0, 0.1, 0)
-		add_child(g)
-
-
-func _build_hud() -> void:
-	var layer := CanvasLayer.new()
-	add_child(layer)
-
-	count_label = Label.new()
-	count_label.position = Vector2(24, 18)
-	count_label.add_theme_font_size_override("font_size", 34)
-	count_label.add_theme_constant_override("outline_size", 8)
-	count_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(count_label)
-
-	mode_label = Label.new()
-	mode_label.position = Vector2(24, 62)
-	mode_label.add_theme_font_size_override("font_size", 24)
-	mode_label.add_theme_constant_override("outline_size", 6)
-	mode_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(mode_label)
-
-
-	var armor_text := Label.new()
-	armor_text.text = "ARMOR"
-	armor_text.position = Vector2(24, 100)
-	armor_text.add_theme_font_size_override("font_size", 20)
-	armor_text.add_theme_constant_override("outline_size", 6)
-	armor_text.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(armor_text)
-	armor_bar = ProgressBar.new()
-	armor_bar.max_value = player.MAX_HP
-	armor_bar.value = player.MAX_HP
-	armor_bar.show_percentage = false
-	armor_bar.position = Vector2(110, 104)
-	armor_bar.size = Vector2(220, 20)
-	var fill := StyleBoxFlat.new()
-	fill.bg_color = Color(0.85, 0.75, 0.3)
-	armor_bar.add_theme_stylebox_override("fill", fill)
-	var bg := StyleBoxFlat.new()
-	bg.bg_color = Color(0, 0, 0, 0.6)
-	armor_bar.add_theme_stylebox_override("background", bg)
-	layer.add_child(armor_bar)
-
-	alert_label = Label.new()
-	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	alert_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	alert_label.offset_top = 70
-	alert_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	alert_label.add_theme_font_size_override("font_size", 40)
-	alert_label.add_theme_constant_override("outline_size", 10)
-	alert_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(alert_label)
-
-	hold_bar = ProgressBar.new()
-	hold_bar.min_value = 0.0
-	hold_bar.max_value = 1.0
-	hold_bar.show_percentage = false
-	hold_bar.custom_minimum_size = Vector2(320, 22)
-	hold_bar.set_anchors_preset(Control.PRESET_CENTER_TOP)
-	hold_bar.offset_left = -160
-	hold_bar.offset_right = 160
-	hold_bar.offset_top = 125
-	hold_bar.offset_bottom = 147
-	hold_bar.visible = false
-	layer.add_child(hold_bar)
-
-
-	hint_label = Label.new()
-	var hint := hint_label
-	hint.text = "Move: L-stick (light tilt = sneak)  Jump: A  Punch: X  Crouch: L1/L2  Grab: R1/R2  Lamp: Y  Look: R-stick  Restart: Start"
-	hint.anchor_top = 1.0
-	hint.anchor_bottom = 1.0
-	hint.offset_top = -44
-	hint.offset_left = 24
-	hint.add_theme_font_size_override("font_size", 20)
-	hint.add_theme_constant_override("outline_size", 6)
-	hint.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(hint)
-
-	message_label = Label.new()
-	message_label.set_anchors_preset(Control.PRESET_CENTER)
-	message_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	message_label.grow_vertical = Control.GROW_DIRECTION_BOTH
-	message_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	message_label.add_theme_font_size_override("font_size", 52)
-	message_label.add_theme_constant_override("outline_size", 12)
-	message_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	layer.add_child(message_label)
-
-	_update_hud()
-
-
-## Top banner: the hold prompt, or COMBAT while any soldier is fighting you.
-func _update_alert() -> void:
-	if player == null or alert_label == null:
-		return
-	armor_bar.value = player.hp
-	var held: bool = player.holding != null
-	hold_bar.visible = held
-	var fighting := false
-	for s in get_tree().get_nodes_in_group("soldiers"):
-		if s.is_fighting():
-			fighting = true
-	if held:
-		alert_label.text = "Tap GRAB to put him out!"
-		alert_label.modulate = Color(1, 0.8, 0.3)
-		hold_bar.value = player.hold_progress
-	elif fighting and not player.dead:
-		alert_label.text = "! COMBAT !"
-		alert_label.modulate = Color(1, 0.25, 0.2) if Time.get_ticks_msec() % 600 < 400 else Color(1, 0.6, 0.5)
-	else:
-		alert_label.text = ""
-
-
-func _on_caught() -> void:
-	caught += 1
-	_update_hud()
-
-
-func _on_died() -> void:
-	game_over = true
-	message_label.text = "MECH DOWN\nPress Start to try again"
-	message_label.modulate = Color(1, 0.4, 0.3)
-
-
-func _update_hud() -> void:
-	var total := SOLDIER_SPOTS.size()
-	count_label.text = "Soldiers down: %d / %d" % [caught, total]
-	if caught >= total:
-		game_over = true
-		message_label.text = "Patrol cleared!\nPress Start to play again"
-		message_label.modulate = Color.WHITE
-	elif not game_over:
-		message_label.text = ""
