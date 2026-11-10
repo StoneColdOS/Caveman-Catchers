@@ -61,7 +61,7 @@ func _ground() -> void:
 	plane.size = Vector2(HALF * 2 + 80, HALF * 2 + 80)
 	plane.subdivide_width = 40
 	plane.subdivide_depth = 40
-	add_child(Util.mesh(plane, Color(0.2, 0.2, 0.23), Vector3.ZERO, false, 0.25))  # asphalt
+	add_child(Util.mesh(plane, Color(0.17, 0.15, 0.28), Vector3.ZERO, false, 0.25))  # asphalt
 	# Invisible walls at the edge of the neighborhood
 	for i in 4:
 		var wall := StaticBody3D.new()
@@ -93,7 +93,7 @@ func _ground() -> void:
 				marks.append([Vector3(2.6, 0.05, 1.0), Vector3(c - STREET * 0.5 - 1.8, 0.03, l + off)])
 	var mm := MeshInstance3D.new()
 	mm.mesh = Util.merged_boxes(marks)
-	mm.material_override = Util.mat(Color(0.75, 0.75, 0.7), true)
+	mm.material_override = Util.mat(Color(0.5, 0.48, 0.62), true)
 	mm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mm)
 
@@ -101,7 +101,7 @@ func _ground() -> void:
 ## One city block: a sidewalk slab and 3 to 6 buildings packed onto lots.
 func _block(c: Vector3) -> void:
 	var size := PITCH - STREET   # 34
-	var walk := Util.mesh(Util.box(Vector3(size, 0.3, size)), Color(0.45, 0.45, 0.47), c + Vector3(0, 0.15, 0), false, TEX)
+	var walk := Util.mesh(Util.box(Vector3(size, 0.3, size)), Color(0.33, 0.3, 0.48), c + Vector3(0, 0.15, 0), false, TEX)
 	walk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(walk)
 	# Split the block into lots: 2 or 3 columns, 2 rows
@@ -136,10 +136,11 @@ func _block(c: Vector3) -> void:
 
 func _building(center: Vector3, size: Vector3, kind: String) -> void:
 	var palettes := {
-		"shop": [Color(0.75, 0.7, 0.6), Color(0.62, 0.66, 0.7), Color(0.7, 0.62, 0.55), Color(0.55, 0.6, 0.55)],
-		"house": [Color(0.78, 0.74, 0.66), Color(0.6, 0.5, 0.42), Color(0.7, 0.72, 0.74)],
-		"office": [Color(0.55, 0.57, 0.6), Color(0.65, 0.63, 0.58), Color(0.48, 0.52, 0.56)],
-		"tower": [Color(0.6, 0.62, 0.66), Color(0.7, 0.68, 0.64), Color(0.5, 0.48, 0.5)],
+		# Dark deco: slate indigo, plum, deep teal-gray, and red brick
+		"shop": [Color(0.46, 0.14, 0.11), Color(0.36, 0.34, 0.54), Color(0.42, 0.24, 0.4), Color(0.52, 0.22, 0.13)],
+		"house": [Color(0.38, 0.35, 0.55), Color(0.44, 0.13, 0.1), Color(0.3, 0.35, 0.46)],
+		"office": [Color(0.32, 0.31, 0.5), Color(0.44, 0.13, 0.1), Color(0.28, 0.33, 0.44)],
+		"tower": [Color(0.34, 0.32, 0.54), Color(0.25, 0.27, 0.4), Color(0.42, 0.13, 0.1)],
 	}
 	var pal: Array = palettes[kind]
 	var color: Color = pal[rng.randi() % pal.size()]
@@ -187,20 +188,20 @@ func _building(center: Vector3, size: Vector3, kind: String) -> void:
 					pane = [Vector3(0.1, 1.4, 1.5), Vector3(hx + 0.02, y, a)]
 				else:
 					pane = [Vector3(0.1, 1.4, 1.5), Vector3(-hx - 0.02, y, a)]
-				if rng.randf() < 0.28:
+				if rng.randf() < 0.32:
 					lit.append(pane)
 				else:
 					dark.append(pane)
 	if dark.size() > 0:
 		var dm := MeshInstance3D.new()
 		dm.mesh = Util.merged_boxes(dark)
-		dm.material_override = Util.mat(Color(0.07, 0.08, 0.11), true)
+		dm.material_override = Util.mat(Color(0.03, 0.02, 0.06), true)
 		dm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		body.add_child(dm)
 	if lit.size() > 0:
 		var lm := MeshInstance3D.new()
 		lm.mesh = Util.merged_boxes(lit)
-		lm.material_override = Util.mat([Color(1.0, 0.85, 0.55), Color(0.85, 0.95, 1.0)][rng.randi() % 2], true)
+		lm.material_override = Util.mat([Color(1.0, 0.84, 0.4), Color(0.98, 0.9, 0.62)][rng.randi() % 2], true)   # warm yellow
 		lm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		body.add_child(lm)
 
@@ -209,13 +210,13 @@ func _building(center: Vector3, size: Vector3, kind: String) -> void:
 			# Pitched tile roof
 			var roof := PrismMesh.new()
 			roof.size = Vector3(size.x + 1.0, 2.6, size.z + 1.0)
-			var rc: Color = [Color(0.25, 0.3, 0.38), Color(0.42, 0.22, 0.18), Color(0.3, 0.3, 0.3)][rng.randi() % 3]
+			var rc: Color = [Color(0.2, 0.2, 0.36), Color(0.45, 0.12, 0.1), Color(0.16, 0.14, 0.22)][rng.randi() % 3]
 			body.add_child(Util.mesh(roof, rc, Vector3(0, size.y / 2.0 + 1.3, 0), false, TEX))
 		"shop":
 			# Lit storefront and a striped awning on the front (+Z) side
-			var front := Util.glow(Util.box(Vector3(size.x * 0.8, 2.4, 0.1)), [Color(1.0, 0.95, 0.8), Color(0.8, 1.0, 0.9), Color(1.0, 0.85, 0.7)][rng.randi() % 3], Vector3(0, -size.y / 2.0 + 1.5, hz + 0.03))
+			var front := Util.glow(Util.box(Vector3(size.x * 0.8, 2.4, 0.1)), [Color(1.0, 0.88, 0.55), Color(1.0, 0.8, 0.45), Color(0.95, 0.92, 0.75)][rng.randi() % 3], Vector3(0, -size.y / 2.0 + 1.5, hz + 0.03))
 			body.add_child(front)
-			var aw := Util.mesh(Util.box(Vector3(size.x * 0.9, 0.2, 1.6)), [Color(0.7, 0.15, 0.15), Color(0.15, 0.35, 0.6), Color(0.2, 0.5, 0.3)][rng.randi() % 3], Vector3(0, -size.y / 2.0 + 3.1, hz + 0.8), false, TEX)
+			var aw := Util.mesh(Util.box(Vector3(size.x * 0.9, 0.2, 1.6)), [Color(0.7, 0.12, 0.1), Color(0.2, 0.18, 0.4), Color(0.12, 0.1, 0.14)][rng.randi() % 3], Vector3(0, -size.y / 2.0 + 3.1, hz + 0.8), false, TEX)
 			aw.rotation.x = 0.2
 			body.add_child(aw)
 			_sign(body, size, rng.randf() < 0.6)
@@ -235,7 +236,7 @@ func _building(center: Vector3, size: Vector3, kind: String) -> void:
 
 ## Neon sign: a glowing board with darker "lettering" blocks (no real text).
 func _sign(body: Node3D, size: Vector3, vertical: bool) -> void:
-	var neon := [Color(1.0, 0.25, 0.6), Color(0.2, 0.9, 1.0), Color(1.0, 0.85, 0.2), Color(0.6, 1.0, 0.3), Color(1.0, 0.4, 0.15)]
+	var neon := [Color(1.0, 0.8, 0.3), Color(1.0, 0.25, 0.15), Color(0.95, 0.9, 0.7), Color(1.0, 0.55, 0.15)]   # deco: yellow, red, cream
 	var c: Color = neon[rng.randi() % neon.size()]
 	var node := Node3D.new()
 	if vertical:
@@ -270,7 +271,7 @@ func _sign(body: Node3D, size: Vector3, vertical: bool) -> void:
 ## The center block is a small plaza: open ground for duels, a few trees and benches.
 func _plaza(c: Vector3) -> void:
 	var size := PITCH - STREET
-	add_child(Util.mesh(Util.box(Vector3(size, 0.3, size)), Color(0.5, 0.48, 0.44), c + Vector3(0, 0.15, 0), false, TEX))
+	add_child(Util.mesh(Util.box(Vector3(size, 0.3, size)), Color(0.36, 0.32, 0.5), c + Vector3(0, 0.15, 0), false, TEX))
 	for i in 8:
 		var a := TAU * i / 8.0
 		var p := c + Vector3(cos(a), 0, sin(a)) * 12.0
@@ -280,38 +281,58 @@ func _plaza(c: Vector3) -> void:
 		trunk.height = 4.0
 		trunk.radial_segments = 6
 		var tree := Node3D.new()
-		tree.add_child(Util.mesh(trunk, Color(0.3, 0.22, 0.18), Vector3(0, 2.0, 0)))
-		var crown := Util.mesh(Util.sphere(2.6), [Color(0.95, 0.65, 0.75), Color(0.25, 0.4, 0.28)][i % 2], Vector3(0, 5.3, 0))
+		tree.add_child(Util.mesh(trunk, Color(0.12, 0.08, 0.12), Vector3(0, 2.0, 0)))
+		var crown := Util.mesh(Util.sphere(2.6), [Color(0.5, 0.14, 0.2), Color(0.12, 0.1, 0.2)][i % 2], Vector3(0, 5.3, 0))
 		crown.scale = Vector3(1.0, 0.75, 1.0)
 		tree.add_child(crown)
 		_prop(tree, p, 2.5, 4.0)
 
 
-## Tall indestructible buildings ringing the neighborhood, half lost in the fog.
+## Tall indestructible buildings ringing the neighborhood: black deco silhouettes
+## against the red sky, with stepped setback crowns, spires and scattered yellow windows.
 func _backdrop() -> void:
+	var sil := Util.mat(Color(0.05, 0.025, 0.06), true)
+	var win := Util.mat(Color(1.0, 0.8, 0.35), true)
 	for side in 4:
 		var a := -HALF - 10.0
 		while a < HALF + 10.0:
 			var w := rng.randf_range(10.0, 18.0)
-			var h := rng.randf_range(25.0, 50.0)
-			var pos: Vector3
+			var h := rng.randf_range(28.0, 60.0)
+			var base: Vector3
 			if side == 0:
-				pos = Vector3(a, h / 2.0, -HALF - 14)
+				base = Vector3(a, 0, -HALF - 14)
 			elif side == 1:
-				pos = Vector3(a, h / 2.0, HALF + 14)
+				base = Vector3(a, 0, HALF + 14)
 			elif side == 2:
-				pos = Vector3(-HALF - 14, h / 2.0, a)
+				base = Vector3(-HALF - 14, 0, a)
 			else:
-				pos = Vector3(HALF + 14, h / 2.0, a)
-			add_child(Util.mesh(Util.box(Vector3(w, h, w)), Color(0.34, 0.33, 0.42), pos, false, TEX))
+				base = Vector3(HALF + 14, 0, a)
+			var parts: Array = [[Vector3(w, h, w), Vector3(0, h / 2.0, 0)]]
+			var top := h
+			var tw := w
+			for step in rng.randi_range(1, 3):        # setbacks
+				tw *= rng.randf_range(0.6, 0.78)
+				var sh := rng.randf_range(3.0, 8.0)
+				parts.append([Vector3(tw, sh, tw), Vector3(0, top + sh / 2.0, 0)])
+				top += sh
+			if rng.randf() < 0.45:                    # spire
+				var sp := rng.randf_range(6.0, 16.0)
+				parts.append([Vector3(0.7, sp, 0.7), Vector3(0, top + sp / 2.0, 0)])
+			var mi := MeshInstance3D.new()
+			mi.mesh = Util.merged_boxes(parts)
+			mi.material_override = sil
+			mi.position = base
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mi)
 			var lit: Array = []
-			for k in 10:
-				lit.append([Vector3(1.2, 1.0, w + 0.1), Vector3(rng.randf_range(-w / 2 + 1, w / 2 - 1), rng.randf_range(-h / 2 + 2, h / 2 - 2), 0)])
-				lit.append([Vector3(w + 0.1, 1.0, 1.2), Vector3(0, rng.randf_range(-h / 2 + 2, h / 2 - 2), rng.randf_range(-w / 2 + 1, w / 2 - 1))])
+			for k in 9:
+				lit.append([Vector3(0.9, 1.2, w + 0.1), Vector3(rng.randf_range(-w / 2 + 1, w / 2 - 1), rng.randf_range(3.0, h - 2), 0)])
+				lit.append([Vector3(w + 0.1, 1.2, 0.9), Vector3(0, rng.randf_range(3.0, h - 2), rng.randf_range(-w / 2 + 1, w / 2 - 1))])
 			var lm := MeshInstance3D.new()
 			lm.mesh = Util.merged_boxes(lit)
-			lm.material_override = Util.mat(Color(0.55, 0.45, 0.32), true)   # dim, so they sit in the haze
-			lm.position = pos
+			lm.material_override = win
+			lm.position = base
+			lm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(lm)
 			a += w + rng.randf_range(1.0, 4.0)
 
@@ -397,8 +418,36 @@ func _lamp(p: Vector3) -> void:
 	var n := Node3D.new()
 	n.add_child(Util.mesh(Util.box(Vector3(0.2, 6.0, 0.2)), Color(0.2, 0.2, 0.22), Vector3(0, 3.0, 0)))
 	n.add_child(Util.mesh(Util.box(Vector3(1.4, 0.15, 0.2)), Color(0.2, 0.2, 0.22), Vector3(0.6, 6.0, 0)))
-	n.add_child(Util.glow(Util.box(Vector3(0.6, 0.2, 0.4)), Color(1.0, 0.92, 0.75), Vector3(1.1, 5.9, 0)))
+	n.add_child(Util.glow(Util.box(Vector3(0.6, 0.2, 0.4)), Color(0.92, 0.94, 1.0), Vector3(1.1, 5.9, 0)))
 	_prop(n, p, 0.6, 1.0)
+	_light_pool(p + Vector3(1.1, 0, 0))
+
+
+## A pool of cold lamp light painted on the street (cheap: no real light).
+var _pool_mat: StandardMaterial3D
+func _light_pool(at: Vector3) -> void:
+	if _pool_mat == null:
+		var img := Image.create(64, 64, false, Image.FORMAT_RGBA8)
+		for y in 64:
+			for x in 64:
+				var d := Vector2(x - 31.5, y - 31.5).length() / 31.5
+				var a := clampf(1.0 - d, 0.0, 1.0)
+				a = smoothstep(0.0, 0.35, a) * 0.85     # flat pool with a short soft edge
+				img.set_pixel(x, y, Color(1, 1, 1, a))
+		_pool_mat = StandardMaterial3D.new()
+		_pool_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_pool_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_pool_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+		_pool_mat.albedo_texture = ImageTexture.create_from_image(img)
+		_pool_mat.albedo_color = Color(0.26, 0.28, 0.5)
+	var q := PlaneMesh.new()
+	q.size = Vector2(11, 11)
+	var mi := MeshInstance3D.new()
+	mi.mesh = q
+	mi.material_override = _pool_mat
+	mi.position = Vector3(at.x, 0.37, at.z)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 ## Wraps a prop in a frozen rigid body: it stands still until something big hits it.

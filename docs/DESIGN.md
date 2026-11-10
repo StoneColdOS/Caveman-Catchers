@@ -5,7 +5,7 @@
 
 ## The pitch
 
-Giant cyborg sword duels in a destructible Tokyo. The right stick is the sword, every enemy has a blade too, and you move like an anime ninja. Everything is exaggerated like a Tarantino movie: oil gushes, sparks, slow motion, limbs flying, buildings coming down.
+Giant cyborg sword duels in a destructible dark deco city. R2 strikes and the cuts flow like Metal Gear Rising, every enemy has a blade too, and you move like an anime ninja. Everything is exaggerated like a Tarantino movie: oil gushes, sparks, slow motion, limbs flying, buildings coming down.
 
 ## Inspirations
 
@@ -19,7 +19,8 @@ Giant cyborg sword duels in a destructible Tokyo. The right stick is the sword, 
 ## Locked decisions
 
 - **Name:** Mech Mania
-- **Look (modernized Nov 10 for readability):** a retro flavor, but clean. The screen filter is now 540 lines with light dithering, vertex wobble and texture warp are dialed way down (and nearly off on the mechs), filmic tonemapping, glow on neon and blades, and a brighter night with lighter fog. Mech trim glows (red on enemies, orange on you) so you can track limbs in a fight
+- **Look: dark deco (Nov 10, from the user's 90s animated noir references).** A painted red sky that fades to near-black, thin black cloud streaks and a big pale moon. Distant towers are pure black silhouettes with stepped setback crowns and spires, dotted with yellow windows. Close buildings are slate indigo, plum, teal-gray and red brick. Light falls in flat hard-edged bands (cel lighting): cold lavender moonlight from above, a faint red bounce from the sky on the shadow side, and painted pools of cold light under the street lamps. Textures are toned way down so surfaces read as flat paint. Neon is limited to deco colors (yellow, red, cream)
+- **Old look note (modernized Nov 10 for readability):** a retro flavor, but clean. The screen filter is now 540 lines with light dithering, vertex wobble and texture warp are dialed way down (and nearly off on the mechs), filmic tonemapping, glow on neon and blades, and a brighter night with lighter fog. Mech trim glows (red on enemies, orange on you) so you can track limbs in a fight
 - **Scale:** mechs about 10 m; shops reach the chest, towers loom over you
 - **Hero:** khaki-grey humanoid mech with rusty orange trim, red visor slit, antenna and a trailing head cable, katana
 - **Enemies:**
@@ -28,7 +29,9 @@ Giant cyborg sword duels in a destructible Tokyo. The right stick is the sword, 
   - Visors: cyan calm, amber suspicious, red fighting, blue flashing weakened, white flash about to strike
 - **Movement (anime ninja, Nov 10):** hold R1 to ninja run at 23 m/s, ducked and pitched forward with the arms and blade streaming straight back. A is a ninja leap (20 m/s up, about 6.5 m high) with a front flip when moving, and a ninja-run leap carries far, onto low roofs. B dashes when moving, crouches when standing, and dives when ninja running. A light push walks and a full push jogs.
 - **Old movement note (Phantom Pain):** a light push walks (2.5 to 4 m/s), a full push jogs (9), holding SPRINT runs at 16 with a heavy lean, wider FOV and momentum. B: crouch when standing, roll when moving, dive when sprinting (launch at 24 m/s, slide to a stop, untouchable). The camera sits close over the right shoulder
-- **Sword on the right stick (Nov 10):** sweeping the stick from one direction to another (more than about 57°) slashes along that path. A quick out-and-back flick cuts in the flicked direction, and pushing the stick out alone does nothing, so you can set up a sweep. A sweep of more than about 130° is a power cut (4 damage, breaks guards). A sweep can pass through the stick's center and still count. Power cuts on a weakened enemy sever along the swing line. X and Y stay as backup quick and heavy slashes. Blades landing together **clash** (both bounce, big sparks)
+- **Sword on R2 (Nov 10, replaces stick swipes and the X/Y light/heavy buttons):** R2 strikes. Pulls are buffered, so pulling during a cut chains straight into the next. With no stick direction each cut reverses the last (with a shifting tilt), so it starts right where the last one ended. That's the flow. Every 4th cut in a chain (within about 0.75 s of each other) is a finisher: wider, slower, 4 damage, breaks guards, and cuts a weakened enemy through along its line. Holding the right stick while striking slashes in that direction. Out of reach (up to 20 m), you dash in and the blade stays cocked until he's in range
+- **Swing shape:** every cut is a big circular sweep like a clock hand, tilted so it reads as a crescent from the camera. The body winds and unwinds with the blade. A thick glowing crescent trails the blade (white-blue for you, red for enemies), drawn from the arc itself so it's smooth at any frame rate
+- **Old sword note (right stick, superseded):** sweeping the stick from one direction to another (more than about 57°) slashes along that path. A quick out-and-back flick cuts in the flicked direction, and pushing the stick out alone does nothing, so you can set up a sweep. A sweep of more than about 130° is a power cut (4 damage, breaks guards). A sweep can pass through the stick's center and still count. Power cuts on a weakened enemy sever along the swing line. X and Y stay as backup quick and heavy slashes. Blades landing together **clash** (both bounce, big sparks)
 - **Camera:** automatic, since the right stick is the sword. It frames the enemy you're fighting (the nearest one onto you, within 28 m) and otherwise swings in behind you. You square up to your opponent, so the left stick circles him. R3 recenters
 - **Enemies:** all swordsmen (the user wanted every enemy to fight with a blade). The gunner code remains but none spawn
 - **Sword details:**

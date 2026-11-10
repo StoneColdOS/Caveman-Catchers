@@ -88,67 +88,90 @@ func _run() -> void:
 	_check(flipped, "...with a front flip when you're moving")
 	await _frames(30)
 
-	# --- 2. Quick slash combo on a swordsman.
+	# --- 2. R2 combo on a swordsman: cuts flow into each other, 4th is a finisher.
 	var sw = _first(es, "swordsman")
 	_face_off(player, sw, 7.0)
 	await _frames(3)
+	sw.hp = 40                                  # tough enough that the finisher doesn't cut him through
 	var hp0: int = sw.hp
 	var angles := []
-	for i in 3:
+	var strike_kinds := []
+	for i in 4:
 		Input.action_press("attack")
 		await _frames(2)
 		Input.action_release("attack")
 		angles.append(player.swing_angle)
-		await _frames(20)
-	_check(sw.hp == hp0 - 6, "Three quick slashes land (%d -> %d)" % [hp0, sw.hp])
-	_check(angles[0] != angles[1] and angles[1] != angles[2], "The combo swings along different lines")
-	_check(city._puddles.size() > 0 or true, "")
+		strike_kinds.append(player.swing_kind)
+		await _swing_done(player)
+	_check(sw.hp == hp0 - 10 and not sw.dead, "R2 x4: three cuts and a finisher land (%d -> %d)" % [hp0, sw.hp])
+	_check(strike_kinds[0] == "slash" and strike_kinds[2] == "slash" and strike_kinds[3] == "finisher", "Every 4th cut in a chain is a finisher (%s)" % [strike_kinds])
+	var flow := absf(wrapf(angles[1] - angles[0] - PI, -PI, PI))
+	_check(flow < 0.7 and angles[1] != angles[2], "Each cut swings back from where the last ended (off by %.2f)" % flow)
 	await _frames(40)
 	_check(city._puddles.size() > 0, "Oil splashes onto the street (%d puddles)" % city._puddles.size())
 
-	# --- 2b. The right stick IS the sword.
+	# --- 2b. R2 buffering, stick direction, lunge.
 	_reset(sw)
 	_face_off(player, sw, 7.0)
 	player.stagger = 0.0
+	player.combo_window = 0.0
 	await _frames(30)
-	var hp_s: int = sw.hp
-	Input.action_press("look_right", 1.0)      # stick out to the right
-	await _frames(4)
-	Input.action_release("look_right")
-	Input.action_press("look_up", 1.0)         # ...then sweep up: a slash along that path
+	Input.action_press("attack")
 	await _frames(2)
-	_check(player.swing != 0 and player.swing_kind == "swipe", "Sweep the stick right -> up: he slashes")
-	await _swing_done(player)
-	Input.action_release("look_up")
-	_check(sw.hp < hp_s, "The swipe lands")
-	await _frames(30)
-	sw.stagger = 0.0
-	Input.action_press("look_left", 1.0)       # stick out left: no slash yet, just the start
-	await _frames(4)
-	_check(player.swing == 0, "Pushing the stick out to start a sweep doesn't slash")
-	Input.action_release("look_left")
-	await _frames(2)                            # (passing through the middle)
-	Input.action_press("look_right", 1.0)      # all the way across: power cut
+	Input.action_release("attack")
+	await _frames(3)
+	Input.action_press("attack")              # pulled again mid-cut: it waits, then chains
 	await _frames(2)
-	_check(player.swing_kind == "big", "Sweep all the way across: power cut")
+	Input.action_release("attack")
+	var first_angle: float = player.swing_angle
+	var chained := false
+	for i in 80:
+		await physics_frame
+		if player.swing_angle != first_angle and player.swing != 0:
+			chained = true
+			break
+	_check(chained, "Pulling R2 during a cut chains the next one straight after")
 	await _swing_done(player)
+	await _frames(50)
+	player.combo_window = 0.0
+	Input.action_press("look_right", 1.0)      # hold the stick right...
+	Input.action_press("attack")              # ...and strike: the slash goes left to right on screen
+	await _frames(2)
+	Input.action_release("attack")
 	Input.action_release("look_right")
-	await _frames(30)
+	_check(absf(wrapf(player.swing_angle - PI, -PI, PI)) < 0.01, "Stick held right + R2: slash travels to the right")
+	await _swing_done(player)
+	await _frames(50)
+	_reset(sw)
+	_face_off(player, sw, 7.0)
+	player.global_position = sw.global_position + Vector3(0, 0, 17)   # from the open side of the street
+	player.rig.rotation.y = PI
+	player.yaw = 0.0
+	sw.rig.rotation.y = 0.0
+	player.combo_window = 0.0
+	await _frames(3)
+	var hp_l: int = sw.hp
+	Input.action_press("attack")
+	await _frames(2)
+	Input.action_release("attack")
+	await _swing_done(player)
+	var gap: float = player.global_position.distance_to(sw.global_position)
+	_check(gap < 13.0 and sw.hp < hp_l, "R2 from 17 m: he lunges in and the cut lands (now %.1f m, hp %d -> %d)" % [gap, hp_l, sw.hp])
+	await _frames(40)
+	# The finisher smashes a guard
+	_reset(sw)
+	_face_off(player, sw, 7.0)
 	sw.guarding = true
-	sw.stagger = 0.0
 	player.stagger = 0.0
-	Input.action_press("look_down", 1.0)
-	await _frames(4)
-	Input.action_release("look_down")
-	Input.action_press("look_up", 1.0)
+	await _frames(3)
+	player.start_swing("finisher", 0.0)
 	await _swing_done(player)
-	Input.action_release("look_up")
-	_check(not sw.guarding and sw.stagger > 0.5, "A power cut breaks his guard")
+	_check(not sw.guarding and sw.stagger > 0.5 and sw.hp == sw.MAX_HP, "A finisher breaks his guard")
 	await _frames(40)
 	# Clash: both blades land together
 	_reset(sw)
 	sw.swing = 2
-	var cr: String = sw.receive_slash(player, "swipe", 0.0)
+	var cr: String = sw.receive_slash(player, "slash", 0.0)
 	_check(cr == "clash" and sw.hp == sw.MAX_HP, "Blades landing together CLASH")
 	await _frames(40)
 	# The camera frames whoever you're fighting
@@ -156,21 +179,15 @@ func _run() -> void:
 	await _frames(5)
 	_check(player.combat_target == sw, "Camera locks onto the mech you're fighting")
 
-	# --- 3. Guard: blocks quick slashes, heavy smashes through.
+	# --- 3. Guard: blocks a normal cut (you recoil).
 	_reset(sw)
 	sw.guarding = true
 	_face_off(player, sw, 7.0)
 	player.stagger = 0.0
 	await _frames(3)
-	player.start_swing("light", 0.0)
+	player.start_swing("slash", 0.0)
 	await _swing_done(player)
-	_check(sw.hp == sw.MAX_HP and player.stagger > 0.0, "His guard blocks a quick slash (you recoil)")
-	await _frames(30)
-	player.stagger = 0.0
-	sw.guarding = true
-	player.start_swing("heavy", -PI / 2.0)
-	await _swing_done(player)
-	_check(not sw.guarding and sw.stagger > 0.5 and sw.hp == sw.MAX_HP, "A heavy slash breaks his guard")
+	_check(sw.hp == sw.MAX_HP and player.stagger > 0.0, "His guard blocks a normal cut (you recoil)")
 	await _frames(60)
 
 	# --- 4. Parry: raise guard just as his blade lands.
@@ -224,6 +241,7 @@ func _run() -> void:
 
 	# --- 7. Blade Mode: time slows, cut line, sever along the line.
 	var sw2 = _second(es, "swordsman")
+	sw.global_position = Vector3(72, 0.2, -72)   # out of the way
 	_reset(sw2)
 	_face_off(player, sw2, 9.0)
 	await _frames(5)
@@ -286,7 +304,7 @@ func _run() -> void:
 	player.rig.rotation.y = 0.0
 	player.stagger = 0.0
 	await _frames(3)
-	player.start_swing("light", 0.0)
+	player.start_swing("slash", 0.0)
 	await _swing_done(player)
 	_check(g2.exposed > 0.0 and g2.weakened(), "Cut him from behind before he knows: he's wide open")
 
@@ -302,7 +320,7 @@ func _run() -> void:
 	player.stagger = 0.0
 	await _frames(3)
 	var n0: int = city.buildings.size()
-	player.start_swing("heavy", 0.0)
+	player.start_swing("finisher", 0.0)
 	await _swing_done(player)
 	_check(city.buildings.size() < n0, "A slash cuts a building down")
 

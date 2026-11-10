@@ -27,7 +27,18 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 13: stick sword, sword enemies, ninja movement, modern look (current)
+## Prototype 14: R2 sword flow, dark deco look (current)
+
+- [x] R2 strikes; light/heavy buttons and stick swipes removed
+- [x] Cuts chain and flow from where the last one ended; every 4th is a finisher that breaks guards
+- [x] Dash in on a strike when the enemy is out of reach
+- [x] Big circular swings with a thick crescent trail; the body follows the blade
+- [x] Enemies sometimes flow into a return cut
+- [x] Dark deco art: red sky, black deco skyline, flat banded light, yellow windows, lamp pools
+- [ ] Play it on the Thor: does the chain feel smooth? Is R2 responsive?
+- [ ] Sound pass
+
+## Prototype 13: stick sword, sword enemies, ninja movement, modern look
 
 - [x] The right stick IS the sword: sweep between directions to slash along that path, flick out and back to cut, a big sweep for a power cut
 - [x] Blades landing together clash

@@ -3,12 +3,10 @@ extends RefCounted
 ## Phantom Pain movement, Rising-style sword.
 ##
 ##   Move          left stick  / WASD
-##   SWORD         right stick / arrow keys  (sweep from one direction to another = slash
-##                                            along that path; flick out = cut that way;
-##                                            a big sweep through the middle = power cut)
-##   Quick / heavy X / Y       / J / K      (button backups)
+##   STRIKE        R2          / J          (keep pulling: cuts flow into each other)
+##   Slash dir     right stick / arrow keys  (hold a direction while you strike)
 ##   Guard / parry L1          / L
-##   Blade Mode    L2 (hold)   / F          (time slows; swipes cut along their own line)
+##   Blade Mode    L2 (hold)   / F          (time slows; stick tilts the line, R2 cuts)
 ##   Ninja run     R1 (hold)   / Shift
 ##   Jump          A           / Space      (ninja leap, flips when moving)
 ##   Dash / crouch / dive  B   / C
@@ -29,11 +27,7 @@ static func setup() -> void:
 
 	_action("attack")
 	_key("attack", KEY_J)
-	_button("attack", JOY_BUTTON_X)
-
-	_action("heavy")
-	_key("heavy", KEY_K)
-	_button("heavy", JOY_BUTTON_Y)
+	_axis("attack", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
 	_action("guard")
 	_key("guard", KEY_L)

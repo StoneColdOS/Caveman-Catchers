@@ -13,6 +13,7 @@ uniform sampler2D tex : source_color, filter_nearest_mipmap, repeat_enable;
 uniform float tex_scale = 1.4;
 uniform float snap_rows = 280.0;   // lower = more jitter (dialed back for readability)
 uniform float affine = 0.35;       // 1 = full PS1 texture warp, 0 = correct
+uniform float tex_amount = 0.3;    // how much the pixel texture shows (flat painted look)
 
 varying vec3 uv_w;   // (uv * w, w): interpolates into affine (non-perspective) uvs
 
@@ -41,6 +42,14 @@ void vertex() {
 
 void fragment() {
 	vec2 uv = uv_w.xy / uv_w.z;
-	ALBEDO = albedo.rgb * texture(tex, uv).rgb;
+	ALBEDO = albedo.rgb * mix(vec3(1.0), texture(tex, uv).rgb, tex_amount);
 	ROUGHNESS = 1.0;
+}
+
+// Dark deco lighting: light falls in flat bands with hard edges, like a painted
+// background. Unlit sides drop into the ambient (deep indigo) almost straight away.
+void light() {
+	float lit = max(dot(NORMAL, LIGHT), 0.0) * ATTENUATION;
+	float band = smoothstep(0.03, 0.07, lit) * 0.5 + smoothstep(0.32, 0.38, lit) * 0.5;
+	DIFFUSE_LIGHT += band * LIGHT_COLOR / PI;
 }

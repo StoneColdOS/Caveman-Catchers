@@ -37,6 +37,7 @@ const SLAM_WINDUP := 0.7
 const SLAM_RANGE := 10.0
 const SLAM_DAMAGE := 3
 
+var chain_left := 0              # return cuts still to come in this chain
 var kind := "gunner"              # set before adding to the tree
 var state := State.PATROL
 var awareness := 0.0
@@ -295,6 +296,11 @@ func _swordsman(delta: float, sees: bool, dist: float, dir: Vector3) -> Vector3:
 			guarding = false
 			attack_cd = minf(attack_cd, 0.15)   # quick counter after a block
 		return Vector3.ZERO
+	if swing == 3 and chain_left > 0 and stagger <= 0.0 and dist < REACH + 2.0:
+		# Flow straight into a return cut from where the last one ended
+		chain_left -= 1
+		start_swing("light", wrapf(swing_angle + PI + randf_range(-0.4, 0.4), -PI, PI))
+		return Vector3.ZERO
 	if swing != 0 or stagger > 0.0:
 		return Vector3.ZERO
 	if sees and dist < REACH - 0.5 and attack_cd <= 0.0:
@@ -302,6 +308,7 @@ func _swordsman(delta: float, sees: bool, dist: float, dir: Vector3) -> Vector3:
 		var ang := randf_range(-PI, PI) if not heavy else -PI / 2.0 + randf_range(-0.6, 0.6)
 		if start_swing("heavy" if heavy else "light", ang):
 			attack_cd = randf_range(0.9, 1.8)
+			chain_left = 0 if heavy else (1 if randf() < 0.45 else 0)
 		return Vector3.ZERO
 	strafe_t -= delta
 	if strafe_t <= 0.0:

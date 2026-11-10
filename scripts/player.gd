@@ -1,19 +1,19 @@
 extends "res://scripts/fighter.gd"
 ## Your mech: a 10 m cyborg swordsman. Moves like an anime ninja, fights with the stick.
 ##
-## SWORD   The right stick IS the katana. Sweep it from one direction to another and
-##         he slashes along that path; flick it straight out and he cuts that way.
-##         A big sweep through the middle is a power cut that breaks guards.
-##         (X and Y still do a quick slash / heavy slash.)
+## SWORD   R2 strikes. Keep pulling it and the cuts flow into each other, each one
+##         starting where the last ended, lunging you onto the enemy. Every 4th cut
+##         in a chain is a huge finisher that breaks guards. Hold the right stick in
+##         a direction while you pull R2 to slash that way.
 ##         L1: guard. Raise it just as his blade lands to PARRY: he reels, wide open.
 ##         Blades that land together clash.
 ## MOVE    Hold R1: ninja run, ducked low, arms and blade streaming behind.
 ##         A: big ninja leap (flips when you're moving; lands on rooftops).
 ##         B: dash (moving, untouchable) / crouch (standing) / dive (ninja running).
 ##         The camera follows on its own and frames the enemy you're fighting.
-## BLADE   Hold L2: time nearly stops. Swipe the stick and the cut goes along your
-## MODE    swipe through him (left stick slides the line). Whatever it crosses comes
-##         off. Heads and torsos only give once he's weakened or parried.
+## BLADE   Hold L2: time nearly stops. The right stick tilts the cut line, the left
+## MODE    stick slides it, R2 cuts (pull it again and again). Whatever it crosses
+##         comes off. Heads and torsos only give once he's weakened or parried.
 ##         A finishing cut through head or torso repairs your armor.
 
 const WALK_SPEED := 4.0
@@ -27,7 +27,6 @@ const DECEL := 34.0
 const TURN_SPEED := 11.0
 const FOLLOW_SPEED := 3.0
 const COMBAT_RANGE := 28.0
-const SWIPE_ANGLE := 1.0          # how far the stick has to travel between directions (radians)
 const DIVE_TIME := 0.85
 const DIVE_SPEED := 24.0
 const MAX_HP := 30
@@ -36,8 +35,12 @@ const BLADE_DRAIN := 18.0         # per real second in Blade Mode
 const CUT_COST := 12.0
 const CUT_RANGE := 20.0
 const TARGET_RANGE := 18.0
-const COMBO_ANGLES := [PI * 0.95, 0.2, -PI / 2.0]   # right-to-left, left-to-right rising, overhead chop
-const HEAVY_ANGLE := -PI / 2.0 - 0.6
+const OPENING_ANGLE := -PI / 4.0    # first cut of a chain: high right, down to low left
+const COMBO_WINDOW := 0.75           # pull R2 again within this to keep the chain going
+const FINISHER_EVERY := 4
+const STRIKE_BUFFER := 0.3
+const LUNGE_STOP := 7.0              # lunge until you're this close
+const LUNGE_RANGE := 20.0
 const WALK_NOISE := 15.0
 const RUN_NOISE := 40.0
 const SPRINT_NOISE := 60.0
@@ -55,7 +58,11 @@ var energy := MAX_ENERGY
 var sprinting := false
 var combo := 0
 var combo_window := 0.0
-var queued_attack := ""
+var strike_buffer := 0.0          # a buffered R2 pull (fires as soon as you can)
+var strike_dir := Vector2.ZERO    # screen direction held on the right stick (zero = flow)
+var strike_target: Node = null    # who you lunge at / turn toward mid-strike
+var last_strike_screen := 0.0
+var _windup_held := 0.0
 # Blade Mode
 var blade_on := false
 var blade_target: Node = null
@@ -69,14 +76,6 @@ var cuts_made := 0
 var touch_cut_angle := 0.0
 var touch_cutting := false
 var combat_target: Node = null
-# Stick-swipe tracking
-var _anchor := Vector2.ZERO
-var _anchor_valid := false
-var _neutral_t := 0.0
-var _anchor_age := 0.0
-var _anchor_used := false
-var queued_swipe := Vector2.ZERO  # buffered swipe direction (screen space)
-var queued_big := false
 var air_time := 0.0
 var was_on_floor := true
 
@@ -167,7 +166,9 @@ func _physics_process(delta: float) -> void:
 	camera_pivot.rotation = Vector3(pitch, yaw, 0)
 	var kc := clampf(6.0 * rdelta, 0.0, 1.0)
 	var sprint_view := is_sprinting()
-	arm.spring_length = lerp(arm.spring_length, 10.0 if blade_on else (17.0 if sprint_view else 14.0), kc)
+	var fighting := focus != null and not sprint_view
+	arm.spring_length = lerp(arm.spring_length, 10.0 if blade_on else (17.0 if sprint_view else (12.0 if fighting else 14.0)), kc)
+	camera_pivot.position.y = lerp(camera_pivot.position.y, 9.5 if fighting or blade_on else 11.0, kc)
 	arm.position.x = lerp(arm.position.x, 5.0 if blade_on else (2.0 if sprint_view else 4.0), kc)
 	camera.fov = lerp(camera.fov, 55.0 if blade_on else (88.0 if sprint_view else 68.0), kc)
 	shake = maxf(0.0, shake - rdelta * 2.5)
@@ -197,8 +198,13 @@ func _physics_process(delta: float) -> void:
 		want_v = roll_dir * ROLL_SPEED
 	elif swing != 0 or stagger > 0.0:
 		move_mode = "Fighting"
-		if swing == 2:
-			want_v = facing() * (14.0 if swing_kind == "heavy" else 9.0)   # step into the cut
+		if swing == 1 or swing == 2:
+			want_v = facing() * (6.0 if swing == 2 else 0.0)              # step into the cut
+			var tgt := strike_target
+			if is_instance_valid(tgt) and not tgt.dead and stagger <= 0.0:
+				var dist := Vector2(tgt.global_position.x - global_position.x, tgt.global_position.z - global_position.z).length()
+				var lunge := clampf((dist - LUNGE_STOP) / 0.08, 0.0, 70.0)   # dash in, Rising style
+				want_v = facing() * maxf(lunge, want_v.length())
 	elif dir != Vector3.ZERO:
 		var speed := 0.0
 		if crouching:
@@ -226,7 +232,7 @@ func _physics_process(delta: float) -> void:
 		move_mode = "Crouching" if crouching else ("Guarding" if guarding else "Standing")
 	var speeding_up := Vector2(want_v.x, want_v.z).length() > Vector2(velocity.x, velocity.z).length()
 	var accel := ACCEL if speeding_up else DECEL
-	if roll_t > 0.0 or dive_t > 0.0 or blade_on:
+	if roll_t > 0.0 or dive_t > 0.0 or blade_on or swing == 1 or swing == 2:
 		accel = 200.0
 	if not is_on_floor():
 		accel *= 0.35   # committed to the leap
@@ -270,6 +276,10 @@ func _physics_process(delta: float) -> void:
 		if face_to.length() > 0.1:
 			var turn := TURN_SPEED * (0.55 if is_sprinting() else 1.0)
 			rig.rotation.y = lerp_angle(rig.rotation.y, atan2(face_to.x, face_to.z), clampf(turn * rdelta, 0.0, 1.0))
+	elif (swing == 1 or swing == 2) and is_instance_valid(strike_target) and not blade_on:
+		# Mid-strike: whip around to face who you're cutting (fast, but not a snap)
+		var to_t: Vector3 = strike_target.global_position - global_position
+		rig.rotation.y = lerp_angle(rig.rotation.y, atan2(to_t.x, to_t.z), clampf(22.0 * rdelta, 0.0, 1.0))
 	elif blade_on and is_instance_valid(blade_target):
 		var to: Vector3 = blade_target.global_position - global_position
 		rig.rotation.y = lerp_angle(rig.rotation.y, atan2(to.x, to.z), clampf(12.0 * rdelta, 0.0, 1.0))
@@ -283,6 +293,8 @@ func _physics_process(delta: float) -> void:
 
 func _combat_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 	combo_window -= rdelta
+	if swing == 0:
+		strike_target = null
 	cut_cd -= rdelta
 	if not blade_on:
 		energy = minf(MAX_ENERGY, energy + 2.0 * rdelta)
@@ -327,88 +339,65 @@ func _combat_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 		else:
 			crouching = not crouching
 
-	# The right stick swings the sword
-	_detect_swipe(rdelta, look)
-	if queued_swipe != Vector2.ZERO and (swing == 0 or swing == 3) and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0:
-		swing = 0
-		_face_nearest()
-		crouching = false
-		var sa := atan2(queued_swipe.y, queued_swipe.x)
-		start_swing("big" if queued_big else "swipe", PI - sa)   # screen right = the mech's -X
-		last_swipe_screen = sa
-		queued_swipe = Vector2.ZERO
-
-	# Buttons still work too (buffered so combos chain smoothly)
+	# R2: strike. Buffered, so pulling it during a cut chains straight into the next
 	if Input.is_action_just_pressed("attack"):
-		queued_attack = "light"
-	if Input.is_action_just_pressed("heavy"):
-		queued_attack = "heavy"
-	if queued_attack != "" and (swing == 0 or swing == 3) and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0:
-		swing = 0
-		_face_nearest()
-		crouching = false
-		if queued_attack == "heavy":
-			start_swing("heavy", HEAVY_ANGLE)
-			combo = 0
-		else:
-			if combo_window <= 0.0:
-				combo = 0
-			start_swing("light", COMBO_ANGLES[combo % COMBO_ANGLES.size()])
-			combo += 1
-			combo_window = 0.7
-		queued_attack = ""
+		_buffer_strike(Vector2(look.x, -look.y))
+	strike_buffer -= rdelta
+	if strike_buffer > 0.0 and (swing == 0 or swing == 3) and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0:
+		strike_buffer = 0.0
+		_strike(strike_dir)
 
 
-## Sweeping the stick from one direction to another = a slash along that path.
-## Flicking it straight out from the middle = a cut toward that direction.
-## Swipe directions are in screen space (x right, y up).
-var last_swipe_screen := 0.0
+func _buffer_strike(stick_screen: Vector2) -> void:
+	strike_buffer = STRIKE_BUFFER
+	strike_dir = stick_screen.normalized() if stick_screen.length() > 0.5 else Vector2.ZERO
 
 
-func _detect_swipe(rdelta: float, look: Vector2) -> void:
-	var s2 := Vector2(look.x, -look.y)     # stick up = screen up
-	var mag := s2.length()
-	if mag > 0.65:
-		_neutral_t = 0.0
-		if _anchor_valid:
-			_anchor_age += rdelta
-			var turn := absf(wrapf(s2.angle() - _anchor.angle(), -PI, PI))
-			if turn > SWIPE_ANGLE:
-				_queue_swipe(s2.normalized() - _anchor.normalized(), turn > 2.3)
-				_anchor = s2
-				_anchor_age = 0.0
-				_anchor_used = true
-		else:
-			# Stick pushed out: remember where the sweep starts (no slash yet)
-			_anchor = s2
-			_anchor_valid = true
-			_anchor_age = 0.0
-			_anchor_used = false
-	elif mag < 0.3 and _anchor_valid:
-		# Passing through the middle mid-sweep is fine: keep the start point briefly
-		_neutral_t += rdelta
-		if _neutral_t > 0.12:
-			if not _anchor_used and _anchor_age < 0.3:
-				_queue_swipe(_anchor.normalized(), false)   # quick out-and-back flick: cut that way
-			_anchor_valid = false
+## One cut. With no stick direction the chain flows by itself: each cut reverses
+## the last one (with a shifting tilt), so it starts right where the last ended.
+func _strike(screen_dir: Vector2) -> void:
+	if combo_window <= 0.0:
+		combo = 0
+	combo += 1
+	var finisher := combo % FINISHER_EVERY == 0
+	var ang := OPENING_ANGLE
+	if screen_dir != Vector2.ZERO:
+		ang = PI - screen_dir.angle()              # screen right = the mech's -X
+	elif combo > 1:
+		ang = swing_angle + PI + (0.5 if combo % 2 == 0 else -0.35)
+	if finisher and screen_dir == Vector2.ZERO:
+		ang = swing_angle + PI                      # the finisher sweeps all the way back through
+	ang = wrapf(ang, -PI, PI)
+	swing = 0
+	crouching = false
+	strike_target = _nearest_enemy(LUNGE_RANGE, -0.2)
+	if combat_target and is_instance_valid(combat_target) and not combat_target.dead and global_position.distance_to(combat_target.global_position) < LUNGE_RANGE:
+		strike_target = combat_target
+	if start_swing("finisher" if finisher else "slash", ang):
+		last_strike_screen = wrapf(PI - ang, -PI, PI)
+		combo_window = COMBO_WINDOW + SWING_TIMES[swing_kind][0] + SWING_TIMES[swing_kind][1]
 
 
-func _queue_swipe(dir: Vector2, big: bool) -> void:
-	if dir.length() < 0.1:
-		return
-	if blade_on:
-		blade_cut(dir.angle())
-		return
-	queued_swipe = dir.normalized()
-	queued_big = big
+## Dashing in from range: hold the cocked blade until he's in reach (briefly).
+func _hold_windup(delta: float) -> bool:
+	if not is_instance_valid(strike_target) or strike_target.dead or _windup_held > 0.3:
+		_windup_held = 0.0
+		return false
+	var to: Vector3 = strike_target.global_position - global_position
+	to.y = 0.0
+	if to.length() > REACH - 2.0:
+		_windup_held += delta
+		return true
+	_windup_held = 0.0
+	return false
 
 
-## Touch: a swipe on the right side of the screen.
+## Touch: a swipe on the right side of the screen strikes along it.
 func touch_swipe(dir_screen: Vector2) -> void:
 	if blade_on:
 		touch_cut(dir_screen.angle())
 	else:
-		_queue_swipe(dir_screen, dir_screen.length() > 2.0)
+		_buffer_strike(dir_screen.normalized())
 
 
 ## Snap to face the nearest enemy in front before a swing (soft targeting).
@@ -477,7 +466,7 @@ func _exit_blade_mode() -> void:
 	blade_target = null
 
 
-## Right stick tilts the line, left stick slides it; flick or X to cut.
+## Right stick tilts the line, left stick slides it; R2 cuts.
 func _blade_mode_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 	energy = maxf(0.0, energy - BLADE_DRAIN * rdelta)
 	if blade_target and (not is_instance_valid(blade_target) or (blade_target.dead and blade_target.lost.has("upper"))):
@@ -489,7 +478,6 @@ func _blade_mode_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 		cut_angle = atan2(-look.y, look.x)   # the line previews where the stick points
 	if touch_cutting:
 		cut_angle = touch_cut_angle
-	_detect_swipe(rdelta, look)
 	if Input.is_action_just_pressed("attack"):
 		blade_cut(cut_angle)
 
@@ -503,12 +491,12 @@ func blade_cut(angle: float) -> Array:
 	cuts_made += 1
 	# Animate a real-speed slash along the same line
 	swing = 2
-	swing_kind = "light"
-	swing_angle = angle if fmod(cuts_made, 2) == 0 else angle + PI
+	swing_kind = "slash"
+	swing_angle = PI - angle if cuts_made % 2 == 0 else -angle   # along the line, alternating ends
 	swing_len = 0.1
 	swing_t = 0.1
 	swing_hit = true
-	_trail_pts.clear()
+	_start_arc()
 	add_shake(0.25)
 	var right := camera.global_basis.x
 	right.y = 0.0
@@ -572,18 +560,18 @@ func die(by: Node) -> void:
 ## Our hits feed blade energy.
 func note_hit(kind: String) -> void:
 	hit_marker = 0.2
-	energy = minf(MAX_ENERGY, energy + (12.0 if kind in ["heavy", "big"] else 8.0))
+	energy = minf(MAX_ENERGY, energy + (12.0 if kind in BREAKERS else 8.0))
 
 
 func _resolve_slash() -> void:
 	super._resolve_slash()
-	# A big sweep through a weakened mech goes right through along the swing line
-	if swing_kind == "big" and (last_result == "hit" or last_result == "break"):
+	# A finisher through a weakened mech goes right through along the swing line
+	if swing_kind == "finisher" and (last_result == "hit" or last_result == "break"):
 		var t := _nearest_enemy(REACH, 0.2)
 		if t and not t.dead and t.weakened():
 			var right := camera.global_basis.x
 			right.y = 0.0
-			var cuts: Array = t.apply_cut(self, Vector2.ZERO, Vector2(cos(last_swipe_screen), sin(last_swipe_screen)), [right.normalized(), Vector3.UP])
+			var cuts: Array = t.apply_cut(self, Vector2.ZERO, Vector2(cos(last_strike_screen), sin(last_strike_screen)), [right.normalized(), Vector3.UP])
 			if not cuts.is_empty() and cuts[0] != "armor":
 				last_result = "cut"
 	if last_result == "hit" or last_result == "kill" or last_result == "break":

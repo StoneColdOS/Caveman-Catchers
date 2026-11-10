@@ -1,8 +1,8 @@
 extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick (light push walks, full push jogs).
-##   Right side: SWIPE TO SLASH. The sword follows your swipe (keep your finger down
-##               and swipe again to chain). A long fast swipe is a power cut.
+##   Right side: SWIPE TO SLASH. The cut follows your swipe (keep your finger down
+##               and swipe again to chain; every 4th cut is a finisher).
 ##               In Blade Mode the swipe is the cut line.
 ##   Buttons:    Jump, Guard (hold; tap right as a blade lands to parry), Blade Mode
 ##               (toggle), Dodge (crouch / dash / dive), Ninja run (toggle).

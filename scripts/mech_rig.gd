@@ -353,27 +353,70 @@ func _rifle_pose(m: Node, aim_local: Vector3) -> Array:
 	return [g, d]
 
 
+# --- Swing arcs
+# A swing is a big circular sweep, like a clock hand: the blade points out from the
+# body in the plane made by the swing direction and forward, and rotates through it.
+#   theta < 0: cocked back on the far side, 0: straight out in front (where it lands),
+#   theta > 0: followed through. Swing direction a: 0 = toward the mech's left (+X),
+#   PI/2 = upward, -PI/2 = downward chop. Chained cuts reverse direction, so each one
+#   starts right where the last one ended: that's what makes a combo flow.
+
+const ARC_EASE := 2.2
+
+
+func swing_arc(kind: String) -> Vector2:
+	return Vector2(-2.5, 2.8) if kind in ["finisher", "heavy"] else Vector2(-1.95, 1.8)
+
+
+func arc_dir(a: float, theta: float) -> Vector3:
+	var c := Vector3(cos(a), sin(a), 0.0)
+	# The arc is tilted up off the forward axis so it sweeps ACROSS the screen as a big
+	# crescent instead of being seen edge-on from behind.
+	var p := Vector3(-sin(a), cos(a), 0.0)
+	if p.y < -0.15 or (absf(p.y) <= 0.15 and p.x > 0.0):
+		p = -p                                     # tilt up, or toward the sword side
+	var out := (Vector3(0, 0, 1) * 0.8 + p * 0.6).normalized()
+	return (out * cos(theta) + c * sin(theta)).normalized()
+
+
+func arc_grip(a: float, theta: float, kind := "slash") -> Vector3:
+	var r := 0.5 if kind in ["finisher", "heavy"] else 0.44
+	return SWING_CENTER + arc_dir(a, theta) * r
+
+
+## Where along the arc the blade is right now.
+func swing_theta(m: Node) -> float:
+	var arc := swing_arc(m.swing_kind)
+	var u: float = clampf(1.0 - m.swing_t / maxf(m.swing_len, 0.001), 0.0, 1.0)
+	match m.swing:
+		1: return arc.x                                                # cocked (the pose blends there)
+		2: return lerpf(arc.x, arc.y, 1.0 - pow(1.0 - u, ARC_EASE))  # whip through, ease out
+		3: return arc.y + 0.15 * ease(u, 0.5)                          # settle
+	return 0.0
+
+
+## How far through the strike (0..1) the blade crosses the front: when it lands.
+func hit_progress(kind: String) -> float:
+	var arc := swing_arc(kind)
+	var front := -arc.x / (arc.y - arc.x)
+	return 1.0 - pow(1.0 - front, 1.0 / ARC_EASE)
+
+
 ## Katana: where the grip is and which way the blade points.
-## A swing travels along an arc in front of the body in the direction of swing_angle
-## (0 = toward the mech's left side, PI/2 = upward, -PI/2 = downward chop...).
 func _katana_pose(m: Node) -> Array:
 	if m.dead:
 		return [Vector3(0.45, 0.6, 0.6), Vector3(0.3, -0.4, 1.0)]
 	var swing: int = m.swing
 	if swing != 0:
-		var a: float = m.swing_angle
-		var c := Vector3(cos(a), sin(a), 0.0)       # direction the blade travels
+		var th := swing_theta(m)
 		var u: float = 1.0 - m.swing_t / maxf(m.swing_len, 0.001)
-		var s := -1.25                               # position along the arc: -1.25 cocked .. 1 finished
-		match swing:
-			1: s = lerpf(-0.9, -1.25, ease(u, 0.5))  # wind up
-			2: s = lerpf(-1.25, 1.0, u)              # the cut itself
-			3: s = 1.0
-		var g := SWING_CENTER + c * s * 0.62 + Vector3(0, 0, 1) * (1.0 - s * s) * 0.3
-		if swing == 3:
-			g = g.lerp(Vector3(0.35, 1.3, 0.35), ease(u, 2.0))
-		var d := (c * s * 1.1 + Vector3(0, 0, 0.9)).normalized()
-		return [g, d]
+		if swing == 3 and u > 0.45:
+			return _katana_rest(m)                # recovered: ease back to the ready pose
+		return [arc_grip(m.swing_angle, th, m.swing_kind), arc_dir(m.swing_angle, th)]
+	return _katana_rest(m)
+
+
+func _katana_rest(m: Node) -> Array:
 	if m.guarding:
 		return [Vector3(0.0, 1.95, 0.6), Vector3(-0.95, 0.25, 0.2)]   # blade across the body
 	if m.in_blade_mode():
@@ -390,9 +433,14 @@ func _pose_weapon(k: float, aim_local: Vector3) -> void:
 	var g: Vector3 = p[0]
 	var d: Vector3 = (p[1] as Vector3).normalized()
 	g -= d * recoil * 0.12
-	var fast: bool = m.swing == 2
-	grip = g if fast else grip.lerp(g, k)
-	gun_dir = d if fast else gun_dir.lerp(d, k).normalized()
+	# Strikes track the arc tightly, everything else blends smoothly
+	var kk := k
+	if weapon == "katana" and m.swing == 2:
+		kk = clampf(k * 3.0, 0.0, 1.0)
+	elif weapon == "katana" and m.swing == 1:
+		kk = clampf(k * 1.6, 0.0, 1.0)
+	grip = grip.lerp(g, kk)
+	gun_dir = gun_dir.slerp(d, kk).normalized() if gun_dir.angle_to(d) < 3.0 else gun_dir.lerp(d, kk).normalized()
 	if gun_dir.length() < 0.01:
 		gun_dir = Vector3.FORWARD
 	gun.transform = Transform3D(Basis.looking_at(-gun_dir, Vector3.UP) if absf(gun_dir.y) < 0.98 else Basis.looking_at(-gun_dir, Vector3.FORWARD), grip)
@@ -465,21 +513,23 @@ func animate(delta: float) -> void:
 
 	# Swings drive the whole body: wind back, then unwind hard through the cut
 	var twist := -hip_twist
-	if m.swing != 0:
+	if m.swing != 0 and weapon == "katana":
+		# The whole body follows the blade around the arc: wound up, then unwinding
 		var a: float = m.swing_angle
-		var dirx := cos(a)
-		match m.swing:
-			1: twist = -dirx * 0.55
-			2: twist = dirx * 0.7
-			3: twist = dirx * 0.45
-		lean += 0.15 if m.swing == 2 else 0.0
+		var th := swing_theta(m)
+		var big: bool = m.swing_kind in ["finisher", "heavy"]
+		twist = sin(th) * cos(a) * (0.85 if big else 0.6)
+		lean += -sin(th) * sin(a) * 0.25 + (0.12 if m.swing == 2 else 0.04)
+		if m.swing == 3:
+			var u: float = 1.0 - m.swing_t / maxf(m.swing_len, 0.001)
+			twist *= 1.0 - ease(u, 0.6)
 	var aim_body: Vector3 = global_basis.inverse() * m.aim_direction()
 	aim_body = aim_body.normalized() if aim_body.length() > 0.01 else Vector3.FORWARD
 	if weapon == "rifle" and m.is_aiming():
 		twist = clampf(atan2(aim_body.x, aim_body.z), -1.2, 1.2)
 
 	var k := clampf(9.0 * delta, 0.0, 1.0)
-	var kt := clampf((30.0 if m.swing == 2 else 10.0) * delta, 0.0, 1.0)
+	var kt := clampf((24.0 if m.swing == 2 else 12.0) * delta, 0.0, 1.0)
 	if not upper_gone:
 		body_root.position.y = lerp(body_root.position.y, body_y, clampf(14.0 * delta, 0.0, 1.0))
 		if rolling:
@@ -564,7 +614,7 @@ func animate(delta: float) -> void:
 	_pose_weapon(clampf(14.0 * delta, 0.0, 1.0), (body_root.basis.inverse() * aim_body).normalized())
 	hands[1].position = grip
 	var fore := grip + gun_dir * (0.45 if weapon == "rifle" else -0.2)   # rifle foregrip / two-hand katana
-	var two_handed: bool = weapon == "rifle" or m.guarding or m.in_blade_mode() or (m.swing != 0 and m.swing_kind in ["heavy", "big"])
+	var two_handed: bool = weapon == "rifle" or m.guarding or m.in_blade_mode() or (m.swing != 0 and m.swing_kind in ["heavy", "finisher"])
 	if weapon == "rifle" and m.reload_t > 0.0 and fmod(t, 0.5) < 0.25:
 		fore = grip + gun_dir * 0.2 + Vector3(0, -0.2, 0)
 	if not two_handed or lost.has("arm_r") or (weapon == "rifle" and gait > 0.3 and not m.is_aiming() and m.reload_t <= 0.0):

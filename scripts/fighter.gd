@@ -3,9 +3,10 @@ extends CharacterBody3D
 ## rolling, diving, and coming apart. Over-the-top on purpose: every hit sprays oil
 ## and sparks and stops time for a beat; kills drop into slow motion.
 ##
-## Katana:
-##   light  fast slash (combos), 2 damage
-##   heavy  big slash, 4 damage, breaks guards
+## Katana (one strike button, Rising style):
+##   slash     fast flowing cut, 2 damage; each one chains from where the last ended
+##   finisher  every 4th cut in a chain: a huge sweep, 4 damage, breaks guards
+##   (enemies use light / heavy: same idea, slower and telegraphed)
 ##   guard  blocks slashes from the front and deflects bullets
 ##   parry  guard just before a slash lands: the attacker reels, wide open (exposed)
 ## Cutting along a line (Blade Mode) takes off whatever the line passes through.
@@ -28,8 +29,9 @@ const CROUCH_CENTER := 4.2
 const PART_RADIUS := {"head": 1.0, "arm": 1.1, "leg": 1.4, "body": 99.0}
 
 # Sword timing: [windup, strike, recover] in seconds
-const SWING_TIMES := {"light": [0.1, 0.11, 0.2], "heavy": [0.34, 0.15, 0.38], "swipe": [0.03, 0.1, 0.16], "big": [0.05, 0.12, 0.26]}
-const SWING_DAMAGE := {"light": 2, "heavy": 4, "swipe": 2, "big": 4}
+const SWING_TIMES := {"slash": [0.07, 0.17, 0.2], "finisher": [0.12, 0.24, 0.32], "light": [0.1, 0.17, 0.22], "heavy": [0.3, 0.22, 0.38]}
+const SWING_DAMAGE := {"slash": 2, "finisher": 4, "light": 2, "heavy": 4}
+const BREAKERS := ["heavy", "finisher"]   # swings that smash through a guard
 const REACH := 10.5
 const PARRY_WINDOW := 0.25
 const STAGGER_T := 0.45
@@ -72,7 +74,11 @@ var last_result := ""             # what your last cut did (HUD)
 
 var _trail: MeshInstance3D
 var _trail_mesh: ImmediateMesh
-var _trail_pts: Array = []
+var _arc_head := 0.0              # the slash crescent: from tail to head along the swing arc
+var _arc_tail := 0.0
+var _arc_fade := 0.0
+var _arc_angle := 0.0
+var _arc_kind := "slash"
 
 
 func _setup_mech(is_enemy: bool, hp_max: int, weapon_kind := "katana") -> void:
@@ -99,7 +105,6 @@ func _setup_mech(is_enemy: bool, hp_max: int, weapon_kind := "katana") -> void:
 	var tm := StandardMaterial3D.new()
 	tm.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	tm.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	tm.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
 	tm.cull_mode = BaseMaterial3D.CULL_DISABLED
 	tm.vertex_color_use_as_albedo = true
 	_trail.material_override = tm
@@ -144,6 +149,11 @@ func opponents() -> Array:
 
 func on_hit_taken(_from: Node, _damage: int) -> void:
 	pass
+
+
+## Keep the blade cocked a moment longer (the player does this while dashing in).
+func _hold_windup(_delta: float) -> bool:
+	return false
 
 
 # --- Basics
@@ -213,13 +223,13 @@ func _update_swing(delta: float) -> void:
 	swing_t -= delta
 	match swing:
 		1:
-			if swing_t <= 0.0:
+			if swing_t <= 0.0 and not _hold_windup(delta):
 				swing = 2
 				swing_len = SWING_TIMES[swing_kind][1]
 				swing_t = swing_len
-				_trail_pts.clear()
+				_start_arc()
 		2:
-			if not swing_hit and swing_t <= swing_len * 0.5:
+			if not swing_hit and 1.0 - swing_t / swing_len >= rig.hit_progress(swing_kind):
 				swing_hit = true
 				_resolve_slash()
 			if swing_t <= 0.0 and swing == 2:
@@ -279,7 +289,7 @@ func receive_slash(attacker: Node, kind: String, angle: float) -> String:
 				city.sparks(hit_at, 30, Color(1, 0.95, 0.6))
 			_hitstop(0.14)
 			return "parry"
-		if kind == "heavy" or kind == "big":
+		if kind in BREAKERS:
 			guarding = false
 			stagger = 0.9
 			_knock(-to_att, 10.0)
@@ -297,7 +307,7 @@ func receive_slash(attacker: Node, kind: String, angle: float) -> String:
 	hp -= dmg
 	swing = 0
 	guarding = false
-	var heavy_hit := kind == "heavy" or kind == "big"
+	var heavy_hit: bool = kind in BREAKERS
 	stagger = STAGGER_T * (1.6 if heavy_hit else 1.0)
 	_knock(-to_att, 12.0 if heavy_hit else 6.0)
 	var spray := Vector3(cos(angle), sin(angle), 0)
@@ -525,24 +535,58 @@ func _update_mech(delta: float) -> void:
 	_update_trail(delta)
 
 
-## Glowing ribbon behind the blade during a cut.
+func _start_arc() -> void:
+	_arc_kind = swing_kind
+	_arc_angle = swing_angle
+	_arc_tail = rig.swing_arc(swing_kind).x
+	_arc_head = _arc_tail
+	_arc_fade = 1.0
+
+
+## The slash crescent: a thick glowing sweep that follows the blade's arc, bright at
+## the leading edge and fading behind it (drawn from the arc itself, so it's smooth
+## at any frame rate).
 func _update_trail(delta: float) -> void:
-	for p in _trail_pts:
-		p[2] += delta
-	while _trail_pts.size() > 0 and _trail_pts[0][2] > 0.16:
-		_trail_pts.pop_front()
-	if swing == 2 and weapon == "katana":
-		var bw: Array = rig.blade_world()
-		_trail_pts.append([bw[0], bw[1], 0.0])
 	_trail_mesh.clear_surfaces()
-	if _trail_pts.size() < 2:
+	if weapon != "katana":
 		return
+	if swing == 2 and not disarmed():
+		_arc_head = rig.swing_theta(self)
+		_arc_tail = maxf(_arc_tail, _arc_head - 3.2)
+		_arc_fade = 1.0
+	elif _arc_fade > 0.0:
+		_arc_fade -= delta / 0.16
+		_arc_tail = lerpf(_arc_tail, _arc_head, clampf(10.0 * delta, 0.0, 1.0))
+	if _arc_fade <= 0.0 or _arc_head - _arc_tail < 0.05:
+		return
+	var xf: Transform3D = rig.body_root.global_transform
+	var c := Color(0.82, 0.93, 1.0) if not rig.enemy else Color(1.0, 0.38, 0.32)
+	var big: bool = _arc_kind in BREAKERS
+	var inner := 0.12 if big else 0.22
+	var n := 22
+	# Wide crescent
 	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
-	var c := Color(0.75, 0.9, 1.0) if not rig.enemy else Color(1.0, 0.35, 0.3)
-	for p in _trail_pts:
-		var a := clampf(1.0 - p[2] / 0.16, 0.0, 1.0) * 0.85
-		_trail_mesh.surface_set_color(Color(c, a * 0.15))
-		_trail_mesh.surface_add_vertex(p[0])
+	for i in n:
+		var f := float(i) / float(n - 1)
+		var th := lerpf(_arc_tail, _arc_head, f)
+		var d: Vector3 = rig.arc_dir(_arc_angle, th)
+		var g: Vector3 = rig.arc_grip(_arc_angle, th, _arc_kind)
+		var a := smoothstep(0.0, 0.3, f) * (0.3 + 0.6 * f) * _arc_fade
+		_trail_mesh.surface_set_color(Color(c, a * 0.05))
+		_trail_mesh.surface_add_vertex(xf * (g + d * (0.14 + rig.BLADE * inner)))
 		_trail_mesh.surface_set_color(Color(c, a))
-		_trail_mesh.surface_add_vertex(p[1])
+		_trail_mesh.surface_add_vertex(xf * (g + d * (0.14 + rig.BLADE * 1.12)))
+	_trail_mesh.surface_end()
+	# Hot white edge along the blade tip
+	_trail_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLE_STRIP)
+	for i in n:
+		var f := float(i) / float(n - 1)
+		var th := lerpf(_arc_tail, _arc_head, f)
+		var d: Vector3 = rig.arc_dir(_arc_angle, th)
+		var g: Vector3 = rig.arc_grip(_arc_angle, th, _arc_kind)
+		var a := pow(f, 1.3) * _arc_fade
+		_trail_mesh.surface_set_color(Color(1, 1, 1, a))
+		_trail_mesh.surface_add_vertex(xf * (g + d * (0.14 + rig.BLADE * 0.9)))
+		_trail_mesh.surface_set_color(Color(1, 1, 1, a * 0.3))
+		_trail_mesh.surface_add_vertex(xf * (g + d * (0.14 + rig.BLADE * 1.08)))
 	_trail_mesh.surface_end()

@@ -1,5 +1,5 @@
 extends Node3D
-## Mech Mania: builds the night-time Tokyo neighborhood (heavy PSX look), your mech,
+## Mech Mania: builds the night-time Tokyo neighborhood (dark deco look), your mech,
 ## the enemy mechs and the HUD (armor, blade energy, the Blade Mode cut line).
 
 const Util := preload("res://scripts/util.gd")
@@ -59,45 +59,64 @@ func _process(delta: float) -> void:
 
 
 func _build_environment() -> void:
-	# Tokyo night, cleaner and brighter than before so fights read: lighter haze,
-	# filmic tonemapping, and glow so neon, blades and mech trim pop.
+	# Dark deco (the look of 90s animated noir): a painted red sky with black cloud
+	# streaks and a big moon, buildings that are near-black silhouettes in the
+	# distance and flat purple-blue where the moonlight hits, warm yellow windows,
+	# and cold pools of light under the street lamps.
+	var moon_dir := Vector3(0.45, 0.32, -0.83).normalized()
+	var sky_mat := ShaderMaterial.new()
+	sky_mat.shader = load("res://shaders/sky_deco.gdshader")
+	sky_mat.set_shader_parameter("moon_dir", moon_dir)
+	var sky := Sky.new()
+	sky.sky_material = sky_mat
 	var env := Environment.new()
-	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.08, 0.08, 0.16)
+	env.background_mode = Environment.BG_SKY
+	env.sky = sky
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.55, 0.58, 0.8)
-	env.ambient_light_energy = 0.7
+	env.ambient_light_color = Color(0.3, 0.22, 0.5)
+	env.ambient_light_energy = 0.5
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.14, 0.12, 0.22)
-	env.fog_density = 0.006
+	env.fog_light_color = Color(0.13, 0.03, 0.07)
+	env.fog_density = 0.0085
+	env.fog_sky_affect = 0.0
 	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
-	env.tonemap_exposure = 1.1
+	env.tonemap_exposure = 0.95
 	env.glow_enabled = true
-	env.glow_intensity = 0.9
-	env.glow_bloom = 0.08
-	env.glow_hdr_threshold = 0.85
+	env.glow_intensity = 0.8
+	env.glow_bloom = 0.05
+	env.glow_hdr_threshold = 0.9
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
+	# Moonlight: cold lavender from the moon's side, long hard shadows
 	var moon := DirectionalLight3D.new()
-	moon.rotation_degrees = Vector3(-50, 35, 0)
-	moon.light_energy = 0.95
-	moon.light_color = Color(0.6, 0.65, 0.95)
+	moon.light_energy = 1.0
+	moon.light_color = Color(0.66, 0.62, 1.0)
 	moon.shadow_enabled = true
 	moon.directional_shadow_max_distance = 90.0
 	add_child(moon)
+	var key_dir := Vector3(moon_dir.x, 0.75, moon_dir.z).normalized()   # higher than the painted moon
+	moon.look_at_from_position(Vector3.ZERO, -key_dir, Vector3.UP)
+	# Red bounce from the sky on the other side: warm edges on the shadowed faces
+	var rim := DirectionalLight3D.new()
+	rim.light_energy = 0.35
+	rim.light_color = Color(1.0, 0.32, 0.2)
+	rim.shadow_enabled = false
+	add_child(rim)
+	rim.look_at_from_position(Vector3.ZERO, Vector3(moon_dir.x, -0.35, moon_dir.z).normalized(), Vector3.UP)
 
-	# A few colored neon glows at street crossings
-	var colors := [Color(1.0, 0.3, 0.6), Color(0.2, 0.8, 1.0), Color(1.0, 0.75, 0.3), Color(0.5, 1.0, 0.5)]
-	var spots := [Vector3(-24, 6, -24), Vector3(24, 6, 24), Vector3(-24, 6, 24), Vector3(24, 6, -24), Vector3(-72, 6, 72), Vector3(72, 6, -72)]
+	# Street light at the crossings: cold white-blue pools, a few warm ones
+	var colors := [Color(0.75, 0.8, 1.0), Color(1.0, 0.78, 0.4), Color(0.75, 0.8, 1.0)]
+	var spots := [Vector3(-24, 7, -24), Vector3(24, 7, 24), Vector3(-24, 7, 24), Vector3(24, 7, -24), Vector3(-72, 7, 72), Vector3(72, 7, -72)]
 	for i in spots.size():
 		var l := OmniLight3D.new()
 		l.position = spots[i]
 		l.light_color = colors[i % colors.size()]
-		l.light_energy = 2.0
-		l.omni_range = 26.0
-		l.omni_attenuation = 1.2
+		l.light_energy = 2.4
+		l.omni_range = 24.0
+		l.omni_attenuation = 1.0
+		l.light_specular = 0.0
 		add_child(l)
 
 
@@ -235,7 +254,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "SWORD: right stick (sweep between directions)  Guard/parry: L1  Blade Mode: L2  Ninja run: R1  Jump: A  Dash: B"
+	hint_label.text = "STRIKE: R2 (keep pulling to chain)  Guard/parry: L1  Blade Mode: L2  Ninja run: R1  Jump: A  Dash: B"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44
@@ -401,7 +420,7 @@ func _update_debug() -> void:
 	for id in pads:
 		lines.append("Pad %d: %s" % [id, Input.get_joy_name(id)])
 	var held: PackedStringArray = []
-	for a in ["attack", "heavy", "guard", "blade", "sprint", "roll"]:
+	for a in ["attack", "guard", "blade", "sprint", "roll"]:
 		if Input.is_action_pressed(a):
 			held.append(a)
 	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))
