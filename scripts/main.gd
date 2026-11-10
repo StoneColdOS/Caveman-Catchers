@@ -209,7 +209,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "Move: L-stick  Turn: R-stick  Aim/lock: L1/L2 (hold)  Fire: R1/R2  Roll: A  Crouch: B  Reload: X  Restart: Start"
+	hint_label.text = "Run: L-stick  Lock: R1 (D-pad = HEAD/ARM/LEG)  Aim: L1  Fire: X  Sidestep: L2/R2  Roll/Crouch: B  Jump: A  Reload: Y"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44
@@ -258,7 +258,7 @@ func _update_hud_live(delta: float) -> void:
 
 	# Flash what your last strike did
 	if player.last_result != "":
-		var words := {"crit": "CRITICAL", "kill": "MECH DOWN", "silent": "SILENT KILL"}
+		var words := {"crit": "CRITICAL", "kill": "MECH DOWN", "silent": "SILENT KILL", "headshot": "HEADSHOT", "decap": "HEAD OFF", "disarmed": "DISARMED", "leg": "LEG OFF"}
 		result_label.text = words.get(player.last_result, "")
 		result_label.modulate = Color(1, 0.85, 0.4) if player.last_result != "crit" else Color(1, 0.5, 0.4)
 		player.last_result = ""
@@ -277,7 +277,7 @@ func _draw_reticle() -> void:
 	var size := reticle.get_viewport_rect().size
 	var hm: float = player.hit_marker
 	if player.target and is_instance_valid(player.target):
-		var p3: Vector3 = player.target.center()
+		var p3: Vector3 = player.target.rig.part_point(player.part)
 		if cam.is_position_behind(p3):
 			return
 		var p := cam.unproject_position(p3)
@@ -294,6 +294,11 @@ func _draw_reticle() -> void:
 				reticle.draw_line(corner, corner - Vector2(0, sy * arm), c, 4.0)
 		if l >= 0.999:
 			reticle.draw_circle(p, 5.0, c)
+		var font := reticle.get_theme_default_font()
+		var label: String = player.part.to_upper()
+		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
+		reticle.draw_string_outline(font, p + Vector2(-w / 2.0, r + 30), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 6, Color.BLACK)
+		reticle.draw_string(font, p + Vector2(-w / 2.0, r + 30), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, c)
 		if hm > 0.0:
 			_hit_x(p, Color(1, 1, 1, hm * 5.0))
 	else:
@@ -374,7 +379,7 @@ func _update_debug() -> void:
 	for id in pads:
 		lines.append("Pad %d: %s" % [id, Input.get_joy_name(id)])
 	var held: PackedStringArray = []
-	for a in ["aim", "fire", "roll", "crouch", "reload", "restart"]:
+	for a in ["lock", "aim", "fire", "strafe_left", "strafe_right", "roll", "jump", "reload"]:
 		if Input.is_action_pressed(a):
 			held.append(a)
 	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))

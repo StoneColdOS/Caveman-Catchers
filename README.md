@@ -9,25 +9,35 @@ Built in Godot 4.7, for the AYN Thor handheld and phones.
 
 ![Two mechs in a Tokyo street](docs/concept/mech-mania-gunfight.png)
 
+![Running, Syphon Filter style](docs/concept/mech-mania-run.png)
+
 ## How it plays
 
-- **Syphon Filter movement:** the camera sits behind you and you always face where it looks. The left stick strafes and backpedals, the right stick turns.
-- **Lock-on:** hold AIM to lock onto the enemy nearest your crosshair. The brackets close in and go white, then yellow, then red as your aim settles (faster standing still). A red full-lock shot hits for double and barely misses. Firing loosens the lock a bit, so tap in a rhythm.
-- **Silent kill:** a full-lock shot on an enemy who hasn't noticed you drops him instantly.
-- **Enemies telegraph:** a red laser sight lands on you before every 3-round burst. Roll (bullets pass through you), get a building between you, or keep moving to make him miss.
-- **Stealth:** walking is quiet, jogging is loud, crouching is silent and halves how far they see you. Gunfire and collapsing buildings bring everyone running.
-- **Destruction:** shots that miss hit the city. Buildings take a number of hits and then come down.
-- Your armor: 20. Enemy armor: 16 (2 per shot, 4 at full lock).
+- **Syphon Filter movement:** push the stick and you run at full speed with long strides, heel kicks, arms pumping and the rifle swinging low. You run where you push, and the camera swings in behind you on its own. Hold WALK (L3) to sneak. L2/R2 sidestep without turning.
+- **Lock on (R1):** grabs the enemy in front. You can keep running anywhere (run and gun) while your upper body stays on him. The brackets close in white, then yellow, then red. A full red lock hits for double.
+- **Pick a part while locked** (D-pad up/down or flick the right stick):
+  - **HEAD:** triple damage. A full-lock headshot takes the head off.
+  - **ARM:** shoot the gun arm off and he's disarmed. He charges and tries to slam you; his visor flashes white before he swings.
+  - **LEG:** take a leg off at the knee and he crawls.
+  - **BODY:** normal damage.
+- **Manual aim (L1):** a tight over-the-shoulder crosshair that hits exactly where you point.
+- **Silent kill:** a full-lock shot on an enemy who hasn't noticed you.
+- **Enemies telegraph:** a red laser lands on you before every burst. Roll (B while moving) and bullets pass through you. B standing still crouches. A jumps.
+- **Destruction:** missed shots chew up buildings until they collapse. Rolling into a shop smashes through it.
 
 | | Thor / gamepad | Keyboard |
 |---|---|---|
-| Move / strafe | Left stick (light tilt = quiet walk) | WASD (Ctrl = walk) |
-| Turn / look | Right stick | Arrow keys |
-| Aim / lock on (hold) | L1 or L2 | K |
-| Fire | R1 or R2 | J |
-| Roll | A | Space |
-| Crouch (toggle) | B | C |
-| Reload | X | R |
+| Run | Left stick | WASD |
+| Walk (quiet) | Hold L3 | Hold Ctrl |
+| Camera | Right stick | Arrow keys |
+| Lock on (hold) | R1 | K |
+| Pick part while locked | D-pad up/down or flick right stick | Tab |
+| Manual aim (hold) | L1 | L |
+| Fire | X | J |
+| Sidestep | L2 / R2 | Q / E |
+| Roll / crouch | B | C |
+| Jump | A | Space |
+| Reload | Y | R |
 | Restart | Start | Enter |
 
 ## Running it
@@ -40,4 +50,4 @@ Built in Godot 4.7, for the AYN Thor handheld and phones.
 
 ## Tests
 
-`godot --headless --path . -s res://tests/test_catch.gd` plays through strafing, lock-on, silent kills, damage, reload, enemy lasers and bursts, rolling through fire, cover, destruction, hearing, crouch, defeat and touch controls.
+`godot --headless --path . -s res://tests/test_catch.gd` plays through running, camera follow, sidestep, walk, lock-on, part targeting (headshot, disarm, leg off), disarmed slams, jump, silent kills, damage, reload, enemy lasers and bursts, rolling through fire, cover, destruction, hearing, crouch, defeat and touch controls.

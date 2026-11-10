@@ -2,8 +2,10 @@ extends Node3D
 ## A humanoid mech body: built in "model meters" (about 2.7 tall), scaled up ~3.7x
 ## by the owner to ~10 m. Lanky but human: forward knees, broad chest, neck, visor head.
 ## Carries a rifle in both hands. The pose comes from the owner's state:
-## jog with the rifle at low ready, shoulder it while aiming (upper body twists
-## toward the target), crouch-walk, combat roll, reload, stagger, collapse.
+## a big Syphon Filter run (rifle raised in one hand, the other arm pumping),
+## shoulder it while locked on (upper body twists toward the target while the
+## legs run anywhere), jump, crouch-walk, combat roll, reload, collapse.
+## Head, gun arm and left leg can be shot off: the real pieces fly away.
 
 const Util := preload("res://scripts/util.gd")
 
@@ -153,6 +155,65 @@ func build(is_enemy: bool) -> void:
 	_pose_gun(1.0, Vector3.FORWARD)
 
 
+## Shot off: the real piece breaks away as a tumbling physics body.
+## Returns the rigid body so the city can throw it and clean it up.
+func detach(part: String) -> RigidBody3D:
+	var pieces: Array = []
+	match part:
+		"head":
+			pieces = [head_pivot]
+			head_pivot = Node3D.new()
+			body_root.add_child(head_pivot)
+		"arm":
+			pieces = [arms[1][0], arms[1][1], hands[1], gun]
+			arms[1] = [Node3D.new(), Node3D.new()]
+			body_root.add_child(arms[1][0])
+			body_root.add_child(arms[1][1])
+			hands[1] = Node3D.new()
+			body_root.add_child(hands[1])
+			gun = Node3D.new()
+			body_root.add_child(gun)
+			muzzle = Node3D.new()
+			gun.add_child(muzzle)
+		"leg":
+			pieces = [legs[0][1], feet[0]]
+			legs[0] = [legs[0][0], Node3D.new()]
+			add_child(legs[0][1])
+			feet[0] = Node3D.new()
+			add_child(feet[0])
+	if pieces.is_empty():
+		return null
+	var rb := RigidBody3D.new()
+	rb.collision_layer = Util.LAYER_DEBRIS
+	rb.collision_mask = Util.LAYER_WORLD
+	rb.mass = 30.0
+	var shape := CollisionShape3D.new()
+	var bs := BoxShape3D.new()
+	bs.size = Vector3.ONE * 2.0
+	shape.shape = bs
+	rb.add_child(shape)
+	owner_mech.get_parent().add_child(rb)
+	rb.global_position = (pieces[0] as Node3D).global_position
+	for p in pieces:
+		(p as Node3D).reparent(rb, true)
+	return rb
+
+
+## World position of a body part, for aiming at it.
+func part_point(part: String) -> Vector3:
+	var m := owner_mech
+	if m and ((part == "head" and m.lost_head) or (part == "arm" and m.lost_arm) or (part == "leg" and m.lost_leg)):
+		part = "body"
+	match part:
+		"head":
+			return head_pivot.to_global(Vector3(0, 0.22, 0))
+		"arm":
+			return arms[1][1].global_position
+		"leg":
+			return legs[0][1].global_position
+	return global_position + Vector3.UP * 6.0 * (scale.x / 3.7)
+
+
 func set_eye(c: Color) -> void:
 	eye_mat.albedo_color = c
 
@@ -200,8 +261,9 @@ func _pose_gun(k: float, aim_local: Vector3) -> void:
 			g = Vector3(0.15, 1.6, 0.4)
 			d = Vector3(-0.6, 0.5, 0.6)                 # tipped up to swap the magazine
 		elif m.is_running():
-			g = Vector3(0.28, 1.65, 0.25)
-			d = Vector3(-0.4, 0.7, 0.6)                 # held across the chest while jogging
+			# Gabe style: rifle hangs low in the right hand and swings with the arm
+			g = Vector3(0.42, 1.25, 0.12 - sin(walk_phase) * 0.4)
+			d = Vector3(0.05, -0.55, 0.85)
 	elif m and m.dead:
 		g = Vector3(0.4, 0.5, 0.7)
 		d = Vector3(0.3, -0.2, 1.0)
@@ -223,7 +285,8 @@ func animate(delta: float) -> void:
 	var rolling: bool = m.roll_t > 0.0
 	var moving: bool = hs > 0.15 and m.is_on_floor() and not m.dead and not rolling
 	if moving:
-		walk_phase += hs * delta * (1.9 if running else 2.6)
+		walk_phase += hs * delta * (1.35 if running else 2.6)
+	var airborne: bool = not m.is_on_floor() and not m.dead
 	recoil = maxf(0.0, recoil - delta * 9.0)
 
 	var body_y := 0.0
@@ -232,12 +295,18 @@ func animate(delta: float) -> void:
 	if m.dead:
 		body_y = -1.0
 		lean = 1.25
+	elif airborne:
+		lean = -0.08
 	elif moving:
-		body_y = -absf(sin(walk_phase)) * (0.08 if running else 0.035) + (0.03 if running else 0.0)
-		lean = 0.18 if running else 0.06
-		sway = sin(walk_phase) * 0.035
+		# Big bouncy run: the body springs up off each stride
+		body_y = (absf(cos(walk_phase)) * 0.12 - 0.05) if running else -absf(sin(walk_phase)) * 0.035
+		lean = 0.12 if running else 0.06   # fairly upright, like Gabe
+		sway = sin(walk_phase) * (0.06 if running else 0.035)
 	else:
 		body_y = sin(t * 1.4) * 0.008
+	if m.lost_leg and not m.dead:
+		body_y -= 0.55
+		sway += 0.18
 	if m.crouching and not m.dead:
 		body_y -= 0.5
 		lean += 0.15
@@ -291,10 +360,16 @@ func animate(delta: float) -> void:
 			foot.z += 0.2 if i == 0 else -0.25
 		var lift_now := 0.0
 		if moving:
-			var stride := 0.55 if running else 0.32
+			var stride := 0.8 if running else 0.32
 			foot += mdir * sin(ph) * stride
-			lift_now = maxf(0.0, cos(ph)) * (0.3 if running else 0.15)
+			lift_now = maxf(0.0, cos(ph)) * (0.65 if running else 0.15)
 			foot.y += lift_now
+			if running:
+				foot -= mdir * lift_now * 0.55   # heel kicks up high behind
+		if airborne:
+			foot = Vector3(0.2 * side, 0.55, 0.2 if i == 0 else -0.15)    # tucked mid-jump
+		if m.lost_leg and i == 0:
+			foot = Vector3(0.2 * side, 0.0, -0.2)
 		if rolling:
 			foot = Vector3(0.15 * side, 0.6, 0.1)
 		if _last_lift[i] > 0.02 and lift_now <= 0.02 and moving:
@@ -311,9 +386,16 @@ func animate(delta: float) -> void:
 	var fore := grip + gun_dir * 0.45 + Vector3(0, 0.02, 0)
 	if m.reload_t > 0.0 and fmod(t, 0.5) < 0.25:
 		fore = grip + gun_dir * 0.2 + Vector3(0, -0.2, 0)   # slapping the magazine
-	hands[0].position = fore
-	if moving and not m.is_aiming() and m.reload_t <= 0.0:
-		hands[0].position += Vector3(0, 0.02, 0) * sin(walk_phase * 2.0)
+	if (running and not m.is_aiming() and m.reload_t <= 0.0) or m.lost_arm:
+		# Free arm pumps big while running
+		fore = Vector3(-0.44, 1.4 + maxf(0.0, sin(walk_phase)) * 0.3, 0.1 + sin(walk_phase) * 0.45) if running else Vector3(-0.5, 1.2, 0.15)
+		if m.has_method("is_bashing") and m.is_bashing():
+			fore = Vector3(-0.2, 1.9, 0.9)
+	if airborne:
+		fore = Vector3(-0.7, 1.9, 0.1)
+	hands[0].position = hands[0].position.lerp(fore, clampf(20.0 * delta, 0.0, 1.0))
 	for i in 2:
+		if i == 1 and m.lost_arm:
+			continue
 		var side := -1.0 if i == 0 else 1.0
 		_limb(arms[i], SHOULDER * Vector3(side, 1, 1), hands[i].position, ARM_UPPER, ARM_LOWER, Vector3(0.7 * side, -0.6, -0.5))

@@ -2,7 +2,7 @@ extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick. Light push sneaks, full push runs.
 ##   Right side: drag anywhere empty to look around.
-##   Buttons:    Fire, Aim (toggle: locks on), Roll, Crouch (toggle), Reload.
+##   Buttons:    Fire, Lock (toggle), Part (cycles HEAD/ARM/LEG/BODY), Roll/Crouch, Jump, Reload.
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -14,7 +14,7 @@ var stick_vec := Vector2.ZERO
 var look_finger := -1
 var look_last := Vector2.ZERO
 var button_fingers := {}       # finger index -> button name
-var toggles := {"aim": false, "crouch": false}
+var toggles := {"lock": false}
 var buttons := {}              # name -> {pos, radius, label, action, toggle}
 
 
@@ -33,9 +33,10 @@ func _layout() -> void:
 	var bottom := s.y - 90.0
 	buttons = {
 		"fire":   {"pos": Vector2(right, bottom), "radius": 54.0, "label": "FIRE", "action": "fire", "toggle": false},
-		"aim":    {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "AIM", "action": "aim", "toggle": true},
+		"lock":   {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "LOCK", "action": "lock", "toggle": true},
 		"roll":   {"pos": Vector2(right - 75, bottom - 120), "radius": r, "label": "ROLL", "action": "roll", "toggle": false},
-		"crouch": {"pos": Vector2(right - 245, bottom + 25), "radius": 38.0, "label": "CROUCH", "action": "crouch", "toggle": false},
+		"jump":   {"pos": Vector2(right - 245, bottom + 25), "radius": 38.0, "label": "JUMP", "action": "jump", "toggle": false},
+		"part":   {"pos": Vector2(right - 200, bottom - 105), "radius": 38.0, "label": "PART", "action": "part_next", "toggle": false},
 		"reload": {"pos": Vector2(right + 20, bottom - 215), "radius": 36.0, "label": "RELOAD", "action": "reload", "toggle": false},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 	}
@@ -157,8 +158,11 @@ func _draw() -> void:
 		draw_circle(b.pos, b.radius, fill)
 		draw_arc(b.pos, b.radius, 0, TAU, 40, Color(1, 1, 1, 0.65), 3.0)
 		var text: String = b.label
-		if name == "crouch" and player and player.crouching:
+		if name == "part" and player:
+			text = player.part.to_upper()
+		elif name == "roll" and player and player.crouching:
 			draw_circle(b.pos, b.radius, Color(1, 0.85, 0.3, 0.55))
+			text = "CROUCH"
 		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 		draw_string(font, b.pos + Vector2(-w / 2.0, 6), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	# Phones held upright get a reminder

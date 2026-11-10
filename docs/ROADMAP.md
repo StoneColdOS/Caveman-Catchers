@@ -27,7 +27,19 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 9: humanoid mechs, Syphon Filter gunplay (current)
+## Prototype 10: full Syphon Filter movement + dismemberment (current)
+
+- [x] Playtest of prototype 9. **Verdict:** didn't like the small walking movements; wanted the full Syphon Filter movement (user sent a reference clip)
+- [x] Always-run with big strides, heel kicks, pumping arms, rifle swinging low; walking is a held button
+- [x] Run where you push; centered camera that swings in behind you
+- [x] L2/R2 sidestep, B = roll while moving / crouch standing, A = jump
+- [x] R1 lock-on with run-and-gun; L1 manual precise aim; X fires; Y reloads
+- [x] Part targeting while locked (the user's idea): HEAD (headshots, head comes off), ARM (disarm), LEG (crippled crawl). Limbs fly off as debris
+- [x] Disarmed enemies charge and slam with a telegraphed swing
+- [ ] Play it: does it feel like the clip? Is part targeting worth it, or too fiddly on the Thor?
+- [ ] Sound pass
+
+## Prototype 9: humanoid mechs, Syphon Filter gunplay
 
 - [x] Playtest of prototype 8. **Verdict:** swords too slow, stances confusing, hard to tell what hit, the camera fought you
 - [x] Humanoid mech bodies (forward knees, broad chest, visor helmet), still lanky, rifle in both hands

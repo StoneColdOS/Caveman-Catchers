@@ -8,6 +8,11 @@ extends "res://scripts/fighter.gd"
 ##                Every burst is telegraphed by a red laser sight on you first:
 ##                roll, get behind a building, or keep moving to make him miss.
 ## Unaware and caught by a full lock: one shot drops him.
+## Body parts (you pick one while locked on):
+##   Head: triple damage; enough and it comes off (dead).
+##   Gun arm: shoot it off and he's disarmed. He charges and tries to slam you
+##            (the visor flashes white before he swings: roll or back off).
+##   Leg: shoot it off at the knee and he crawls at a third of the speed.
 
 enum State { PATROL, SUSPICIOUS, INVESTIGATE, COMBAT }
 
@@ -27,6 +32,13 @@ const BURST := 3
 const BURST_GAP := 0.14
 const SHOT_DAMAGE := 1
 const SHOUT := 80.0
+const HEAD_HP := 8
+const ARM_HP := 8
+const LEG_HP := 10
+const HEAD_MULT := 3
+const BASH_WINDUP := 0.7
+const BASH_RANGE := 11.0
+const BASH_DAMAGE := 3
 
 var state := State.PATROL
 var awareness := 0.0
@@ -43,6 +55,10 @@ var burst_left := 0
 var burst_t := 0.0
 var strafe := 1.0
 var strafe_t := 0.0
+var part_hp := {"head": HEAD_HP, "arm": ARM_HP, "leg": LEG_HP}
+var last_hit_result := ""        # what the last bullet did: headshot, decap, disarmed, leg
+var bash_t := 0.0
+var bash_cd := 1.0
 var frozen := false              # tests freeze him in place
 var heading := 0.0
 var alert: Label3D
@@ -109,7 +125,11 @@ func is_fighting() -> bool:
 
 
 func is_aiming() -> bool:
-	return (laser_t > 0.0 or burst_left > 0) and not dead
+	return (laser_t > 0.0 or burst_left > 0) and not dead and not lost_arm
+
+
+func is_bashing() -> bool:
+	return bash_t > 0.0
 
 
 func is_running() -> bool:
@@ -137,6 +157,8 @@ func _physics_process(delta: float) -> void:
 				move = _combat(delta, sees)
 	if stagger > 0.0 or dead:
 		move *= 0.3
+	if lost_leg:
+		move *= 0.33
 	velocity.x = move_toward(velocity.x, move.x, 30.0 * delta)
 	velocity.z = move_toward(velocity.z, move.z, 30.0 * delta)
 	velocity.y = 0.0 if is_on_floor() else velocity.y - GRAVITY * delta
@@ -223,6 +245,9 @@ func _combat(delta: float, sees: bool) -> Vector3:
 	var dir := to / maxf(dist, 0.01)
 	_face(last_seen)
 
+	if lost_arm:
+		return _brawl(delta, dist, dir)
+
 	# Shooting: laser warning, then a 3-round burst
 	if burst_left > 0:
 		burst_t -= delta
@@ -255,6 +280,28 @@ func _combat(delta: float, sees: bool) -> Vector3:
 	if dist < NEAR:
 		return -dir * WALK_SPEED + side * 2.0
 	return side * 3.5
+
+
+## Disarmed: charge in and slam you with the remaining arm. Telegraphed.
+func _brawl(delta: float, dist: float, dir: Vector3) -> Vector3:
+	laser_t = 0.0
+	burst_left = 0
+	bash_cd -= delta
+	if bash_t > 0.0:
+		bash_t -= delta
+		if bash_t <= 0.0:
+			var to_p := _flat(player.global_position - global_position)
+			if to_p.length() < BASH_RANGE and facing().dot(to_p.normalized()) > 0.3:
+				player.take_shot(self, BASH_DAMAGE, player.center())
+				if city:
+					city.impact(player.center(), true)
+			bash_cd = 1.5
+			return dir * 14.0   # lunge through the swing
+		return Vector3.ZERO
+	if dist < BASH_RANGE - 2.0 and bash_cd <= 0.0:
+		bash_t = BASH_WINDUP
+		return Vector3.ZERO
+	return dir * RUN_SPEED * 1.2
 
 
 ## One bullet at you. Harder to hit you when you're moving fast; rolling dodges.
@@ -291,6 +338,49 @@ func hear_noise(pos: Vector3, radius: float, source: Node) -> void:
 		return
 	awareness = minf(0.9, awareness + 0.3)
 	_investigate_at(pos)
+
+
+## A bullet hit a part of him. Parts take extra punishment and can come off.
+func take_shot(from: Node, damage: int, at: Vector3, part := "body") -> void:
+	last_hit_result = ""
+	if dead or roll_t > ROLL_TIME * 0.15:
+		return
+	if part == "precise":
+		part = _part_at(at)
+	if part == "head" and not lost_head:
+		damage *= HEAD_MULT
+		last_hit_result = "headshot"
+	if part_hp.has(part) and damage < 50:
+		part_hp[part] -= damage
+		if part_hp[part] <= 0:
+			match part:
+				"head":
+					lose_part("head", from)
+					last_hit_result = "decap"
+					super.take_shot(from, 999, at, part)
+					return
+				"arm":
+					if not lost_arm:
+						lose_part("arm", from)
+						last_hit_result = "disarmed"
+				"leg":
+					if not lost_leg:
+						lose_part("leg", from)
+						last_hit_result = "leg"
+		if part != "head":
+			damage = int(ceil(damage * 0.5))   # limbs soak half; the rest hurts the body
+	super.take_shot(from, damage, at, part)
+
+
+## Which part a precise (manual-aim) bullet landed on.
+func _part_at(at: Vector3) -> String:
+	if at.distance_to(rig.part_point("head")) < 1.4 and not lost_head:
+		return "head"
+	if at.distance_to(rig.part_point("arm")) < 1.5 and not lost_arm:
+		return "arm"
+	if at.distance_to(rig.part_point("leg")) < 1.8 and not lost_leg:
+		return "leg"
+	return "body"
 
 
 ## Shot: whatever he was doing, now he's fighting (if he survived).
@@ -341,6 +431,8 @@ func _update_look() -> void:
 			alert.modulate = Color(1, 0.85, 0.2)
 		State.COMBAT:
 			c = Color(1.0, 0.15, 0.1)
+	if bash_t > 0.0 and Time.get_ticks_msec() % 160 < 100:
+		c = Color(1, 1, 1)   # about to slam you
 	if dead:
 		c = Color(0.05, 0.05, 0.05)
 		alert.text = ""

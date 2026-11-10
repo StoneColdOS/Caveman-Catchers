@@ -19,6 +19,9 @@ const SHOT_RANGE := 160.0
 const SHOT_NOISE := 70.0          # gunfire is loud
 const CENTER := 6.0               # height of a standing mech's center mass
 const CROUCH_CENTER := 4.2
+const JUMP_SPEED := 14.0
+# How close a shot has to land to its aim point to hit that part (meters)
+const PART_RADIUS := {"head": 1.0, "arm": 1.1, "leg": 1.4, "body": 99.0}
 
 static var hitstop_enabled := true   # tests switch this off
 
@@ -36,6 +39,9 @@ var reload_time := 1.3
 var rig: Node3D
 var city: Node                   # set by main
 var _flash_t := 0.0
+var lost_head := false
+var lost_arm := false             # gun arm gone: disarmed
+var lost_leg := false             # left leg gone at the knee: crawling
 
 
 func _setup_mech(is_enemy: bool, hp_max: int) -> void:
@@ -96,7 +102,7 @@ func is_rolling() -> bool:
 
 
 func can_shoot() -> bool:
-	return not dead and roll_t <= 0.0 and reload_t <= 0.0 and stagger <= 0.0 and ammo > 0
+	return not dead and not lost_arm and roll_t <= 0.0 and reload_t <= 0.0 and stagger <= 0.0 and ammo > 0
 
 
 func start_reload() -> void:
@@ -117,12 +123,14 @@ func start_roll(dir: Vector3) -> bool:
 
 ## Fires one bullet from the muzzle toward `target_point`, scattered by `spread`
 ## (meters of wobble at the target). Returns what it hit: a mech, a building or nothing.
-func shoot_at(target_point: Vector3, spread: float, damage: int) -> Node:
+func shoot_at(target_point: Vector3, spread: float, damage: int, part := "body") -> Node:
 	if not can_shoot():
 		return null
 	ammo -= 1
 	var from: Vector3 = rig.muzzle_world()
-	var aim := target_point + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized() * randf() * spread
+	var off := randf() * spread
+	var aim := target_point + Vector3(randf_range(-1, 1), randf_range(-1, 1), randf_range(-1, 1)).normalized() * off
+	var part_hit: String = part if off < PART_RADIUS.get(part, 99.0) else "body"
 	var dir := (aim - from).normalized()
 	var to := from + dir * SHOT_RANGE
 	var q := PhysicsRayQueryParameters3D.create(from, to, Util.LAYER_WORLD | Util.LAYER_PLAYER | Util.LAYER_ENEMY)
@@ -135,7 +143,7 @@ func shoot_at(target_point: Vector3, spread: float, damage: int) -> Node:
 		var col: Object = hit.collider
 		if col.has_method("take_shot"):
 			victim = col
-			col.take_shot(self, damage, end)
+			col.take_shot(self, damage, end, part_hit)
 		elif city and col.is_in_group("breakable"):
 			city.shoot_building(col, end, from)
 			victim = col
@@ -151,7 +159,7 @@ func shoot_at(target_point: Vector3, spread: float, damage: int) -> Node:
 
 
 ## A bullet hit us. Rolling through fire makes you untouchable.
-func take_shot(from: Node, damage: int, _at: Vector3) -> void:
+func take_shot(from: Node, damage: int, _at: Vector3, _part := "body") -> void:
 	if dead or roll_t > ROLL_TIME * 0.15:
 		return
 	hp -= damage
@@ -162,6 +170,27 @@ func take_shot(from: Node, damage: int, _at: Vector3) -> void:
 		die(from)
 		return
 	on_hit_taken(from, damage)
+
+
+## A body part got shot off: it flies away for real.
+func lose_part(part: String, from: Node) -> void:
+	match part:
+		"head":
+			if lost_head: return
+			lost_head = true
+		"arm":
+			if lost_arm: return
+			lost_arm = true
+			reload_t = 0.0
+		"leg":
+			if lost_leg: return
+			lost_leg = true
+	var rb: RigidBody3D = rig.detach(part)
+	if rb and city:
+		var away: Vector3 = (global_position - from.global_position).normalized() if from else Vector3.UP
+		city._launch(rb, away * 9.0 + Vector3.UP * 10.0)
+		city.burst(rb.global_position)
+		city.smoke(rb.global_position)
 
 
 func die(by: Node) -> void:
