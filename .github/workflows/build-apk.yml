@@ -1,7 +1,7 @@
 name: Build APK
 
 # Every push to main builds an Android APK and puts it on the "latest-build" release.
-# Download it on the Thor: https://github.com/StoneColdOS/mech-mania/releases/tag/latest-build
+# Download it on the Thor: https://github.com/StoneColdOS/Mech-Mania/releases/tag/latest-build
 
 on:
   push:

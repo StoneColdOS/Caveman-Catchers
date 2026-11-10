@@ -31,9 +31,9 @@ Built in Godot 4.7, for the AYN Thor handheld and phones.
 
 ## Running it
 
-**On your iPhone (or any phone):** open [stonecoldos.github.io/mech-mania](https://stonecoldos.github.io/mech-mania/) in Safari and turn the phone sideways. Touch controls appear automatically. Every push rebuilds it.
+**On your iPhone (or any phone):** open [stonecoldos.github.io/Mech-Mania](https://stonecoldos.github.io/Mech-Mania/) in Safari and turn the phone sideways. Touch controls appear automatically. Every push rebuilds it.
 
-**On the Thor:** every push to `main` builds an APK. Open the [latest build](https://github.com/StoneColdOS/mech-mania/releases/tag/latest-build), download `mech-mania.apk` and install it. It installs right over the old Caveman Catchers app.
+**On the Thor:** every push to `main` builds an APK. Open the [latest build](https://github.com/StoneColdOS/Mech-Mania/releases/tag/latest-build), download `mech-mania.apk` and install it. It installs right over the old Caveman Catchers app.
 
 **On your Mac:** install [Godot 4.7](https://godotengine.org/download), import `project.godot`, press **F5**.
 
