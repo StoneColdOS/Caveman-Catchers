@@ -31,10 +31,30 @@ func _run() -> void:
 	player.yaw = PI
 	player.rig.rotation.y = 0.0
 	await _frames(10)
-	Input.action_press("move_right", 0.5)   # even a light push runs
-	await _frames(40)
+	player.global_position = Vector3(-72, 0.2, 70)   # long open street running toward -Z
+	player.yaw = 0.0
+	player.rig.rotation.y = PI
+	await _frames(5)
+	Input.action_press("move_forward", 0.5)   # a light push jogs
+	await _frames(60)
+	var jog: float = Vector2(player.velocity.x, player.velocity.z).length()
+	_check(jog > player.JOG_SPEED * 0.8 and jog < player.RUN_SPEED * 0.8, "A light push jogs (%.1f m/s)" % jog)
+	Input.action_press("move_forward", 1.0)   # full push sprints, ramping up smoothly
+	await _frames(4)
+	var early: float = Vector2(player.velocity.x, player.velocity.z).length()
+	await _frames(50)
 	var v: Vector3 = player.velocity
-	_check(Vector2(v.x, v.z).length() > player.RUN_SPEED * 0.9, "A light push still runs full speed (%.1f m/s)" % Vector2(v.x, v.z).length())
+	_check(early < player.RUN_SPEED * 0.85, "Speed ramps up instead of snapping")
+	_check(Vector2(v.x, v.z).length() > player.RUN_SPEED * 0.9, "A full push sprints (%.1f m/s)" % Vector2(v.x, v.z).length())
+	Input.action_release("move_forward")
+	await _frames(40)
+	player.global_position = Vector3(-72, 0.2, 0)
+	player.yaw = PI
+	player.rig.rotation.y = 0.0
+	await _frames(5)
+	Input.action_press("move_right", 1.0)
+	await _frames(40)
+	v = player.velocity
 	_check(player.facing().dot(v.normalized()) > 0.9, "Your mech turns to run where you push")
 	await _frames(60)
 	Input.action_release("move_right")
@@ -76,22 +96,23 @@ func _run() -> void:
 	Input.action_release("lock")
 	await _frames(5)
 
-	# --- 4. Pick a part: HEAD. A full-lock headshot takes his head off.
+	# --- 4. Full-body lock; push the right stick up to aim at the HEAD.
 	var e1 = es[1]
 	_place_facing(player, e1, 35.0, false)
 	e1.state = e1.State.COMBAT
 	await _frames(3)
 	Input.action_press("lock")
 	await _frames(3)
-	Input.action_press("part_next")
-	await _frames(2)
-	Input.action_release("part_next")
-	_check(player.part == "head", "D-pad picks the HEAD")
+	_check(player.part == "body", "Lock-on aims at the whole body (center mass)")
+	Input.action_press("look_up", 1.0)
+	await _frames(20)
+	_check(player.part == "head", "Right stick up slides the aim to the HEAD")
 	player.lock = 1.0
 	player.fire_cd = 0.0
 	player.fire()
 	await _frames(3)
 	_check(e1.lost_head and e1.dead, "Full-lock headshot: HEAD OFF")
+	Input.action_release("look_up")
 	Input.action_release("lock")
 	await _frames(5)
 
@@ -103,7 +124,9 @@ func _run() -> void:
 	await _frames(3)
 	Input.action_press("lock")
 	await _frames(3)
-	player.part = "arm"
+	Input.action_press("look_right", 1.0)
+	await _frames(20)
+	_check(player.part == "arm", "Right stick sideways aims at the gun ARM")
 	var shots := 0
 	while not e2.lost_arm and shots < 12:
 		player.lock = 1.0
@@ -114,7 +137,10 @@ func _run() -> void:
 		await _frames(2)
 	_check(e2.lost_arm and not e2.dead, "Shooting the gun arm blows it off (%d shots)" % shots)
 	_check(not e2.can_shoot(), "...and he can't shoot anymore")
-	player.part = "leg"
+	Input.action_release("look_right")
+	Input.action_press("look_down", 1.0)
+	await _frames(20)
+	_check(player.part == "leg", "Right stick down aims at the LEG")
 	shots = 0
 	while not e2.lost_leg and shots < 12:
 		player.lock = 1.0
@@ -124,6 +150,7 @@ func _run() -> void:
 		shots += 1
 		await _frames(2)
 	_check(e2.lost_leg and not e2.dead, "Shooting a leg takes it off at the knee (%d shots)" % shots)
+	Input.action_release("look_down")
 	Input.action_release("lock")
 	await _frames(3)
 	_place_facing(player, e2, 16.0, false)
@@ -173,6 +200,26 @@ func _run() -> void:
 		peak = maxf(peak, player.global_position.y)
 	_check(peak > 2.0, "Mech jumps (%.1f m)" % peak)
 	await _frames(40)
+
+	# --- 5d. Enemies dodge: lock on and settle, and he rolls out of it.
+	_place_facing(player, e1, 35.0, false)
+	e1.state = e1.State.COMBAT
+	e1.frozen = false
+	e1.dodge_cd = 0.0
+	e1.fire_cd = 99.0
+	Input.action_press("lock")
+	var dodged := false
+	for i in 240:
+		await physics_frame
+		if e1.roll_t > 0.0:
+			dodged = true
+			break
+	_check(dodged, "Lock onto him and he dodge-rolls out of it")
+	await _frames(40)
+	Input.action_release("lock")
+	e1.frozen = true
+	e1.fire_cd = 0.0
+	await _frames(30)
 
 	# --- 6. Enemy telegraphs with a laser, then bursts. Rolling dodges.
 	_place_facing(player, e1, 35.0, false)
@@ -281,7 +328,7 @@ func _run() -> void:
 	t._touch_move(0, Vector2(100 + t.STICK_RADIUS, 600))
 	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = jog")
 	t._touch_up(0)
-	for name in ["fire", "roll", "reload", "jump", "part"]:
+	for name in ["fire", "roll", "reload", "jump"]:
 		t._touch_down(1, t.buttons[name].pos)
 		var ok := Input.is_action_pressed(t.buttons[name].action)
 		t._touch_up(1)

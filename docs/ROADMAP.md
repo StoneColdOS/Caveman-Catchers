@@ -27,7 +27,17 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 10: full Syphon Filter movement + dismemberment (current)
+## Prototype 11: smooth sprint, full-body lock, dodging enemies (current)
+
+- [x] Playtest of prototype 10. **Verdict:** disliked the movement and the loud alerts; lock-on too easy; wanted a full-body lock with the stick choosing head / limbs / body
+- [x] Removed sound rings, the LOUD movement text and the COMBAT banner
+- [x] Smooth run cycle: speed-matched strides, bob per footfall, counter-rotating shoulders, banking into turns, jog-to-sprint ramp
+- [x] Less vertex jitter on the mechs (the city keeps it)
+- [x] Full-body lock; the right stick slides the aim dot to head / gun arm / leg (touch: drag while locked)
+- [x] Enemies jink and dodge-roll when you're locked on or firing; moving targets settle slower
+- [ ] Play it: does the sprint feel natural now? Is the lock hard enough without being frustrating?
+
+## Prototype 10: full Syphon Filter movement + dismemberment
 
 - [x] Playtest of prototype 9. **Verdict:** didn't like the small walking movements; wanted the full Syphon Filter movement (user sent a reference clip)
 - [x] Always-run with big strides, heel kicks, pumping arms, rifle swinging low; walking is a held button

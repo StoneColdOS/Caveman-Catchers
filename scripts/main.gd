@@ -209,7 +209,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "Run: L-stick  Lock: R1 (D-pad = HEAD/ARM/LEG)  Aim: L1  Fire: X  Sidestep: L2/R2  Roll/Crouch: B  Jump: A  Reload: Y"
+	hint_label.text = "Run: L-stick  Lock: R1 (R-stick aims: head/arm/leg)  Aim: L1  Fire: X  Sidestep: L2/R2  Roll/Crouch: B  Jump: A  Reload: Y"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44
@@ -239,8 +239,7 @@ func _update_hud_live(delta: float) -> void:
 	if player == null or armor_bar == null:
 		return
 	armor_bar.value = player.hp
-	mode_label.text = player.move_mode
-	mode_label.modulate = Color(1, 0.45, 0.35) if player.move_mode.begins_with("Jogging") else (Color(0.6, 1, 0.7) if player.move_mode.contains("silent") else Color.WHITE)
+	mode_label.text = "Crouching" if player.crouching else ""
 	ammo_label.text = ("RELOADING..." if player.reload_t > 0.0 else "AMMO  %d / %d" % [player.ammo, player.mag_size])
 	ammo_label.modulate = Color(1, 0.6, 0.3) if player.reload_t > 0.0 or player.ammo <= 3 else Color.WHITE
 	hurt_rect.color.a = player.hurt * 0.35
@@ -250,11 +249,7 @@ func _update_hud_live(delta: float) -> void:
 	for e in get_tree().get_nodes_in_group("enemies"):
 		if e.is_fighting():
 			fighting = true
-	if fighting and not player.dead:
-		alert_label.text = "! COMBAT !"
-		alert_label.modulate = Color(1, 0.25, 0.2) if Time.get_ticks_msec() % 600 < 400 else Color(1, 0.6, 0.5)
-	else:
-		alert_label.text = ""
+	alert_label.text = ""
 
 	# Flash what your last strike did
 	if player.last_result != "":
@@ -277,30 +272,40 @@ func _draw_reticle() -> void:
 	var size := reticle.get_viewport_rect().size
 	var hm: float = player.hit_marker
 	if player.target and is_instance_valid(player.target):
-		var p3: Vector3 = player.target.rig.part_point(player.part)
-		if cam.is_position_behind(p3):
+		var tgt = player.target
+		var top: Vector3 = tgt.global_position + Vector3.UP * 10.5
+		var bot: Vector3 = tgt.global_position
+		if cam.is_position_behind(top) or cam.is_position_behind(bot):
 			return
-		var p := cam.unproject_position(p3)
+		var pt := cam.unproject_position(top)
+		var pb := cam.unproject_position(bot)
+		var hh := absf(pb.y - pt.y) * 0.5
+		var mid := (pt + pb) * 0.5
+		var hw := hh * 0.45
 		var l: float = player.lock
 		var c := Color(1, 1, 1).lerp(Color(1, 0.9, 0.2), clampf(l * 2.0, 0, 1)).lerp(Color(1, 0.15, 0.1), clampf(l * 2.0 - 1.0, 0, 1))
 		if l >= 0.999:
 			c = Color(1, 0.1, 0.1)
-		var r: float = lerp(90.0, 26.0, l)
-		var arm := r * 0.45
+		# Full-body brackets that tighten as the lock settles
+		var grow := lerpf(1.6, 1.05, l)
+		var ex := hw * grow
+		var ey := hh * grow
+		var arm := minf(ex, ey) * 0.35
 		for sx in [-1.0, 1.0]:
 			for sy in [-1.0, 1.0]:
-				var corner := p + Vector2(sx * r, sy * r)
-				reticle.draw_line(corner, corner - Vector2(sx * arm, 0), c, 4.0)
-				reticle.draw_line(corner, corner - Vector2(0, sy * arm), c, 4.0)
-		if l >= 0.999:
-			reticle.draw_circle(p, 5.0, c)
+				var corner := mid + Vector2(sx * ex, sy * ey)
+				reticle.draw_line(corner, corner - Vector2(sx * arm, 0), c, 3.0)
+				reticle.draw_line(corner, corner - Vector2(0, sy * arm), c, 3.0)
+		# The aim dot (moved with the right stick) and the part under it
+		var dot := cam.unproject_position(player.lock_point())
+		reticle.draw_circle(dot, 6.0, c)
+		reticle.draw_arc(dot, 12.0, 0, TAU, 20, c, 2.0)
 		var font := reticle.get_theme_default_font()
 		var label: String = player.part.to_upper()
-		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22).x
-		reticle.draw_string_outline(font, p + Vector2(-w / 2.0, r + 30), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 6, Color.BLACK)
-		reticle.draw_string(font, p + Vector2(-w / 2.0, r + 30), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, c)
+		reticle.draw_string_outline(font, dot + Vector2(18, 8), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, 6, Color.BLACK)
+		reticle.draw_string(font, dot + Vector2(18, 8), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 22, c)
 		if hm > 0.0:
-			_hit_x(p, Color(1, 1, 1, hm * 5.0))
+			_hit_x(dot, Color(1, 1, 1, hm * 5.0))
 	else:
 		var p := size * 0.5
 		var c := Color(1, 1, 1, 0.75) if player.is_aiming() else Color(1, 1, 1, 0.35)

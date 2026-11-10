@@ -4,7 +4,9 @@ extends "res://scripts/fighter.gd"
 ##   Patrol:      walks the streets between crossings.
 ##   Suspicious:  sees you, "?" grows. Buildings block his view.
 ##   Investigate: heard something (footsteps, gunfire, a building coming down).
-##   Combat:      keeps his distance, strafes, and fires 3-round bursts.
+##   Combat:      keeps his distance, jinks side to side, and fires 3-round bursts.
+##                When you're lined up on him or open fire, he dodge-rolls (bullets
+##                pass through him mid-roll and your lock gets shaken).
 ##                Every burst is telegraphed by a red laser sight on you first:
 ##                roll, get behind a building, or keep moving to make him miss.
 ## Unaware and caught by a full lock: one shot drops him.
@@ -59,6 +61,7 @@ var part_hp := {"head": HEAD_HP, "arm": ARM_HP, "leg": LEG_HP}
 var last_hit_result := ""        # what the last bullet did: headshot, decap, disarmed, leg
 var bash_t := 0.0
 var bash_cd := 1.0
+var dodge_cd := 2.0
 var frozen := false              # tests freeze him in place
 var heading := 0.0
 var alert: Label3D
@@ -159,6 +162,8 @@ func _physics_process(delta: float) -> void:
 		move *= 0.3
 	if lost_leg:
 		move *= 0.33
+	if roll_t > 0.0 and not dead:
+		move = roll_dir * ROLL_SPEED * (0.4 if lost_leg else 0.85)
 	velocity.x = move_toward(velocity.x, move.x, 30.0 * delta)
 	velocity.z = move_toward(velocity.z, move.z, 30.0 * delta)
 	velocity.y = 0.0 if is_on_floor() else velocity.y - GRAVITY * delta
@@ -248,6 +253,20 @@ func _combat(delta: float, sees: bool) -> Vector3:
 	if lost_arm:
 		return _brawl(delta, dist, dir)
 
+	# Dodge: when you're settling a lock on him or shooting at him, roll out of it
+	dodge_cd -= delta
+	var targeted: bool = player.target == self
+	if roll_t <= 0.0 and dodge_cd <= 0.0 and burst_left == 0 and not lost_leg:
+		var threat: bool = targeted and (player.lock > 0.55 or player.fired_t < 0.3)
+		if threat and randf() < 0.6:
+			var side_dir := Vector3.UP.cross(dir) * (strafe if randf() < 0.7 else -strafe)
+			if start_roll(side_dir):
+				laser_t = 0.0
+				strafe = -strafe
+			dodge_cd = randf_range(2.2, 4.0)
+		elif threat:
+			dodge_cd = 0.6
+
 	# Shooting: laser warning, then a 3-round burst
 	if burst_left > 0:
 		burst_t -= delta
@@ -269,17 +288,19 @@ func _combat(delta: float, sees: bool) -> Vector3:
 		laser_t = LASER_TIME
 		fire_cd = randf_range(1.6, 2.8)
 
-	# Footwork: close in if far, back off if close, strafe otherwise
+	# Footwork: close in if far, back off if close, jink side to side otherwise.
+	# Being targeted makes him jink harder and change direction more often.
 	strafe_t -= delta
 	if strafe_t <= 0.0:
-		strafe = -strafe if randf() < 0.5 else strafe
-		strafe_t = randf_range(1.2, 2.8)
+		strafe = -strafe if randf() < (0.75 if targeted else 0.5) else strafe
+		strafe_t = randf_range(0.7, 1.5) if targeted else randf_range(1.2, 2.8)
 	var side := Vector3.UP.cross(dir) * strafe
+	var jink := RUN_SPEED if targeted else 3.5
 	if not sees or dist > FAR:
-		return dir * RUN_SPEED
+		return dir * RUN_SPEED + side * (2.0 if targeted else 0.0)
 	if dist < NEAR:
-		return -dir * WALK_SPEED + side * 2.0
-	return side * 3.5
+		return -dir * WALK_SPEED + side * jink * 0.6
+	return side * jink
 
 
 ## Disarmed: charge in and slam you with the remaining arm. Telegraphed.
@@ -321,7 +342,6 @@ func start_combat() -> void:
 	last_seen = player.global_position
 	if not was:
 		fire_cd = randf_range(0.5, 1.2)
-		Util.noise_ring(get_parent(), global_position, SHOUT, Color(1, 0.2, 0.15, 0.8))
 		get_tree().call_group("enemies", "hear_noise", global_position, SHOUT, self)
 
 

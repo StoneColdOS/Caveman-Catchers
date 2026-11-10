@@ -37,6 +37,10 @@ var gun_dir := Vector3(0, -0.3, 1).normalized()
 var recoil := 0.0
 var step_signal := 0.0           # >0 on the frame a foot lands
 var _last_lift := [0.0, 0.0]
+var gait := 0.0                  # 0 = standing, ~0.4 = jog, 1 = full sprint (smoothed)
+var bank := 0.0                  # leaning into turns
+var _last_yaw := 0.0
+const RUN_MODEL_SPEED := 13.0 / 3.7   # model meters per second at full sprint
 
 
 func build(is_enemy: bool) -> void:
@@ -153,6 +157,11 @@ func build(is_enemy: bool) -> void:
 	flash.visible = false
 	muzzle.add_child(flash)
 	_pose_gun(1.0, Vector3.FORWARD)
+	# Less PS1 vertex jitter on the mechs themselves so moving bodies stay smooth
+	for mi in find_children("", "MeshInstance3D", true, false):
+		if mi.material_override is ShaderMaterial:
+			mi.material_override.set_shader_parameter("snap_rows", 320.0)
+			mi.material_override.set_shader_parameter("affine", 0.5)
 
 
 ## Shot off: the real piece breaks away as a tumbling physics body.
@@ -260,10 +269,10 @@ func _pose_gun(k: float, aim_local: Vector3) -> void:
 		elif m.reload_t > 0.0:
 			g = Vector3(0.15, 1.6, 0.4)
 			d = Vector3(-0.6, 0.5, 0.6)                 # tipped up to swap the magazine
-		elif m.is_running():
-			# Gabe style: rifle hangs low in the right hand and swings with the arm
-			g = Vector3(0.42, 1.25, 0.12 - sin(walk_phase) * 0.4)
-			d = Vector3(0.05, -0.55, 0.85)
+		elif gait > 0.3:
+			# Running: rifle carried low in the right hand, swinging gently with the stride
+			g = Vector3(0.4, 1.32, 0.18 - sin(walk_phase) * 0.28 * gait)
+			d = Vector3(0.05, -0.5, 0.85)
 	elif m and m.dead:
 		g = Vector3(0.4, 0.5, 0.7)
 		d = Vector3(0.3, -0.2, 1.0)
@@ -273,7 +282,8 @@ func _pose_gun(k: float, aim_local: Vector3) -> void:
 	gun.transform = Transform3D(Basis.looking_at(-gun_dir, Vector3.UP) if absf(gun_dir.y) < 0.98 else Basis(), grip)
 
 
-## Jog, strafe, aim, roll, crouch.
+## Smooth run cycle: stride length comes from speed (feet don't slide), the body
+## bobs twice per cycle, shoulders counter-rotate the hips, and the mech banks into turns.
 func animate(delta: float) -> void:
 	var m := owner_mech
 	var t := Time.get_ticks_msec() * 0.001
@@ -281,29 +291,41 @@ func animate(delta: float) -> void:
 	var local_v: Vector3 = global_basis.inverse() * m.velocity * s  # model meters per second
 	var hv := Vector2(local_v.x, local_v.z)
 	var hs := hv.length()
-	var running: bool = m.is_running()
 	var rolling: bool = m.roll_t > 0.0
-	var moving: bool = hs > 0.15 and m.is_on_floor() and not m.dead and not rolling
-	if moving:
-		walk_phase += hs * delta * (1.35 if running else 2.6)
 	var airborne: bool = not m.is_on_floor() and not m.dead
+	var grounded_move: bool = m.is_on_floor() and not m.dead and not rolling
+	var target_gait := clampf(hs / RUN_MODEL_SPEED, 0.0, 1.0) if grounded_move else 0.0
+	gait = move_toward(gait, target_gait, delta * 3.0)
+	# Cadence rises gently with speed; stride length makes up the rest, so feet stay planted
+	var cadence := lerpf(1.0, 1.55, gait)              # strides per second per leg
+	if hs > 0.05 and grounded_move:
+		walk_phase += TAU * cadence * delta
+	var amp := clampf(hs / (4.0 * cadence), 0.0, 0.9) if grounded_move else 0.0
 	recoil = maxf(0.0, recoil - delta * 9.0)
+
+	# Bank into turns from how fast we're rotating
+	var yaw_rate := wrapf(global_rotation.y - _last_yaw, -PI, PI) / maxf(delta, 0.001)
+	_last_yaw = global_rotation.y
+	bank = lerpf(bank, clampf(-yaw_rate * 0.07 * gait, -0.22, 0.22), clampf(5.0 * delta, 0.0, 1.0))
 
 	var body_y := 0.0
 	var lean := 0.03
-	var sway := 0.0
+	var sway := bank
+	var hip_twist := 0.0
 	if m.dead:
 		body_y = -1.0
 		lean = 1.25
+		sway = 0.0
 	elif airborne:
 		lean = -0.08
-	elif moving:
-		# Big bouncy run: the body springs up off each stride
-		body_y = (absf(cos(walk_phase)) * 0.12 - 0.05) if running else -absf(sin(walk_phase)) * 0.035
-		lean = 0.12 if running else 0.06   # fairly upright, like Gabe
-		sway = sin(walk_phase) * (0.06 if running else 0.035)
 	else:
-		body_y = sin(t * 1.4) * 0.008
+		# Two soft bobs per cycle (one per footfall), lowest at mid-stance
+		body_y = -absf(sin(walk_phase)) * lerpf(0.02, 0.07, gait) * clampf(gait * 3.0, 0.0, 1.0)
+		lean = lerpf(0.04, 0.2, gait)
+		sway += sin(walk_phase) * 0.025 * gait
+		hip_twist = sin(walk_phase) * 0.14 * gait     # shoulders counter-rotate the stride
+		if gait < 0.05:
+			body_y = sin(t * 1.4) * 0.008
 	if m.lost_leg and not m.dead:
 		body_y -= 0.55
 		sway += 0.18
@@ -318,14 +340,13 @@ func animate(delta: float) -> void:
 	var aim_world: Vector3 = m.aim_direction()
 	var aim_body := global_basis.inverse() * aim_world
 	aim_body = aim_body.normalized() if aim_body.length() > 0.01 else Vector3.FORWARD
-	var twist := 0.0
+	var twist := -hip_twist
 	if m.is_aiming():
 		twist = clampf(atan2(aim_body.x, aim_body.z), -1.2, 1.2)
 
-	var k := clampf(10.0 * delta, 0.0, 1.0)
-	body_root.position.y = lerp(body_root.position.y, body_y, k)
+	var k := clampf(8.0 * delta, 0.0, 1.0)
+	body_root.position.y = lerp(body_root.position.y, body_y, clampf(14.0 * delta, 0.0, 1.0))
 	if rolling:
-		# Combat roll: tuck and tumble along the roll direction
 		var u: float = 1.0 - m.roll_t / m.ROLL_TIME
 		var rdir: Vector3 = global_basis.inverse() * m.roll_dir
 		rdir.y = 0.0
@@ -340,60 +361,60 @@ func animate(delta: float) -> void:
 		body_root.position.x = lerp(body_root.position.x, 0.0, k)
 		body_root.position.z = lerp(body_root.position.z, 0.6 if m.dead else 0.0, k * 0.5)
 
-	var head_target := Vector3(-lean * 0.5, 0.0, -sway)
+	var head_target := Vector3(-lean * 0.6, -twist * 0.5 if not m.is_aiming() else 0.0, -sway * 0.5)
 	if m.is_aiming():
 		head_target.x = clampf(-asin(clampf(aim_body.y, -1.0, 1.0)), -0.5, 0.5)
-	head_vel += (head_target - head_rot) * 80.0 * delta
-	head_vel -= head_vel * 11.0 * delta
+	head_vel += (head_target - head_rot) * 60.0 * delta
+	head_vel -= head_vel * 12.0 * delta
 	head_rot += head_vel * delta
 	head_pivot.rotation = head_rot
 
-	# Legs: stride along the actual movement direction (jog, strafe, backpedal)
-	var mdir := Vector3(hv.x, 0, hv.y).normalized() if hs > 0.15 else Vector3.BACK
+	# Legs: each foot traces a smooth loop (planted, then lifted and swung forward)
+	var mdir := Vector3(hv.x, 0, hv.y).normalized() if hs > 0.05 else Vector3.BACK
 	step_signal = 0.0
 	for i in 2:
 		var side := -1.0 if i == 0 else 1.0
 		var ph := walk_phase + (PI if i == 1 else 0.0)
-		var foot := Vector3(0.18 * side, 0.0, 0.0)
+		var foot := Vector3(0.17 * side, 0.0, 0.0)
 		if m.crouching:
 			foot.x *= 1.4
 			foot.z += 0.2 if i == 0 else -0.25
 		var lift_now := 0.0
-		if moving:
-			var stride := 0.8 if running else 0.32
-			foot += mdir * sin(ph) * stride
-			lift_now = maxf(0.0, cos(ph)) * (0.65 if running else 0.15)
+		if amp > 0.0:
+			foot += mdir * sin(ph) * amp
+			# Swing phase (foot travelling forward): lift in a smooth arc
+			lift_now = maxf(0.0, cos(ph)) * lerpf(0.1, 0.34, gait)
 			foot.y += lift_now
-			if running:
-				foot -= mdir * lift_now * 0.55   # heel kicks up high behind
+			foot -= mdir * lift_now * 0.35 * gait   # knee folds as the foot passes under
 		if airborne:
-			foot = Vector3(0.2 * side, 0.55, 0.2 if i == 0 else -0.15)    # tucked mid-jump
+			foot = Vector3(0.2 * side, 0.5, 0.15 if i == 0 else -0.1)
 		if m.lost_leg and i == 0:
 			foot = Vector3(0.2 * side, 0.0, -0.2)
 		if rolling:
 			foot = Vector3(0.15 * side, 0.6, 0.1)
-		if _last_lift[i] > 0.02 and lift_now <= 0.02 and moving:
-			step_signal = 1.0 if running else 0.5
+		if _last_lift[i] > 0.02 and lift_now <= 0.02 and amp > 0.0:
+			step_signal = 1.0 if gait > 0.6 else 0.5
 		_last_lift[i] = lift_now
-		feet[i].position = feet[i].position.lerp(foot, clampf(24.0 * delta, 0.0, 1.0))
+		var follow := 30.0 if amp > 0.0 and not airborne else 12.0
+		feet[i].position = feet[i].position.lerp(foot, clampf(follow * delta, 0.0, 1.0))
 		var hip: Vector3 = body_root.transform * Vector3(0.16 * side, HIP_HEIGHT - 0.06, 0) if not rolling else Vector3(0.16 * side, HIP_HEIGHT - 0.06 + body_root.position.y, 0)
 		var ankle: Vector3 = feet[i].position + Vector3(0, 0.14, -0.04)
 		_limb(legs[i], hip, ankle, LEG_UPPER, LEG_LOWER, Vector3(0.1 * side, 0, 1))  # knees bend forward
 
 	# Rifle and both hands
-	_pose_gun(clampf(16.0 * delta, 0.0, 1.0), (body_root.basis.inverse() * aim_body).normalized())
+	_pose_gun(clampf(12.0 * delta, 0.0, 1.0), (body_root.basis.inverse() * aim_body).normalized())
 	hands[1].position = grip
 	var fore := grip + gun_dir * 0.45 + Vector3(0, 0.02, 0)
 	if m.reload_t > 0.0 and fmod(t, 0.5) < 0.25:
 		fore = grip + gun_dir * 0.2 + Vector3(0, -0.2, 0)   # slapping the magazine
-	if (running and not m.is_aiming() and m.reload_t <= 0.0) or m.lost_arm:
-		# Free arm pumps big while running
-		fore = Vector3(-0.44, 1.4 + maxf(0.0, sin(walk_phase)) * 0.3, 0.1 + sin(walk_phase) * 0.45) if running else Vector3(-0.5, 1.2, 0.15)
+	if (gait > 0.3 and not m.is_aiming() and m.reload_t <= 0.0) or m.lost_arm:
+		# Free arm swings opposite the left leg, bigger the faster you go
+		fore = Vector3(-0.43, 1.42 + maxf(0.0, sin(walk_phase)) * 0.18 * gait, 0.1 + sin(walk_phase) * 0.38 * gait)
 		if m.has_method("is_bashing") and m.is_bashing():
 			fore = Vector3(-0.2, 1.9, 0.9)
 	if airborne:
-		fore = Vector3(-0.7, 1.9, 0.1)
-	hands[0].position = hands[0].position.lerp(fore, clampf(20.0 * delta, 0.0, 1.0))
+		fore = Vector3(-0.6, 1.8, 0.1)
+	hands[0].position = hands[0].position.lerp(fore, clampf(12.0 * delta, 0.0, 1.0))
 	for i in 2:
 		if i == 1 and m.lost_arm:
 			continue

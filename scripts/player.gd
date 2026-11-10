@@ -1,39 +1,40 @@
 extends "res://scripts/fighter.gd"
 ## Your mech, with a full Syphon Filter movement system at 10 m tall:
-##   RUN       Push the stick and you run: big bouncy strides, rifle raised, free arm
-##             pumping. The mech turns to run where you push, and the camera swings
+##   RUN       Push the stick and you run where you push: a smooth cycle that ramps
+##             from a jog into a full sprint the further you push. The camera swings
 ##             in behind you on its own. Hold WALK to sneak (quiet, slow).
 ##   SIDESTEP  L2 / R2 strafe left and right without turning.
-##   LOCK      Hold R1 to lock onto the enemy in front. You keep running anywhere
-##             (run and gun): legs go where you push, the upper body stays on him.
-##             Pick a part with the D-pad / flick the right stick:
-##               BODY  normal damage
-##               HEAD  triple damage; a full-lock headshot takes the head off
-##               ARM   shoot his gun arm off: he's disarmed
-##               LEG   shoot a leg off at the knee: he crawls
-##             The brackets close in white -> yellow -> red. Small parts take longer.
+##   LOCK      Hold R1 to lock onto the whole body of the enemy in front. You keep
+##             running anywhere (run and gun) while your upper body stays on him.
+##             The right stick moves your aim point over his body; the part under
+##             the dot is what you hit (let go = center mass):
+##               up = HEAD (triple damage, can come off), sideways = ARM (shoot the
+##               gun arm off to disarm him), down = LEG (shoot it off: he crawls)
+##             The brackets close in white -> yellow -> red. Enemies that strafe and
+##             roll are much harder to settle on. A full lock does double damage.
 ##             A full-lock shot on an enemy who hasn't noticed you is a silent kill.
 ##   AIM       Hold L1 for manual aim: tight over-the-shoulder crosshair, right stick
 ##             aims, you walk. Shots hit exactly where the crosshair is (headshots!).
 ##   ROLL      B while moving: combat roll, bullets pass through you.
 ##             B standing still: crouch. JUMP with A.
 
-const RUN_SPEED := 13.0
+const RUN_SPEED := 13.0           # full sprint
+const JOG_SPEED := 7.0            # light push
 const WALK_SPEED := 4.5
 const CROUCH_SPEED := 3.0
 const STRAFE_SPEED := 9.0
 const LOCK_RUN_SPEED := 11.0
 const AIM_WALK_SPEED := 3.5
-const ACCEL := 60.0
-const TURN_SPEED := 10.0          # how fast the mech swings to face where you run
+const ACCEL := 22.0                # smooth ramp up into a sprint
+const DECEL := 30.0
+const TURN_SPEED := 7.0           # how fast the mech swings to face where you run
 const LOOK_SPEED := 2.4
 const AIM_LOOK_SPEED := 1.2
 const FOLLOW_SPEED := 4.5         # camera swinging back in behind you
 const MAX_HP := 20
 const LOCK_RANGE := 110.0
 const LOCK_CONE := 0.4
-const LOCK_TIME := {"body": 0.8, "leg": 1.0, "arm": 1.2, "head": 1.4}
-const PARTS := ["body", "head", "arm", "leg"]
+const LOCK_TIME := 1.1             # seconds to settle on a target standing still
 const FIRE_RATE := 0.16
 const DAMAGE := 2
 const FULL_LOCK_DAMAGE := 4
@@ -52,9 +53,12 @@ var camera: Camera3D
 var locking := false              # holding R1
 var manual := false               # holding L1
 var target: Node = null
-var part := "body"
+var part := "body"                # part under the aim dot (for the HUD)
+var aim_offset := Vector2.ZERO    # right stick / touch drag, -1..1
+var touch_aim := Vector2.ZERO
 var lock := 0.0                   # 0..1, how settled your aim is
 var fire_cd := 0.0
+var fired_t := 0.0                # time since your last shot (enemies dodge when you open up)
 var look_idle := 0.0
 var shake := 0.0
 var hurt := 0.0
@@ -62,7 +66,6 @@ var hit_marker := 0.0
 var last_result := ""
 var was_on_floor := true
 var air_time := 0.0
-var _flick_ready := true
 
 
 func _ready() -> void:
@@ -111,16 +114,28 @@ func aim_direction() -> Vector3:
 	return (aim_point() - center()).normalized()
 
 
-## Where your shots go: the locked part, or exactly down the crosshair.
+## Where your shots go: the aim dot on the locked enemy, or down the crosshair.
 func aim_point() -> Vector3:
 	if target and is_instance_valid(target) and not target.dead:
-		return target.rig.part_point(part)
+		return lock_point()
 	var from := camera.global_position
 	var fwd := -camera.global_basis.z
 	var q := PhysicsRayQueryParameters3D.create(from + fwd * 12.0, from + fwd * SHOT_RANGE, Util.LAYER_WORLD | Util.LAYER_ENEMY)
 	q.exclude = [get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(q)
 	return hit.position if not hit.is_empty() else from + fwd * SHOT_RANGE
+
+
+## The aim dot: center mass, slid toward his head (up), gun arm (sideways) or
+## leg (down) by the right stick. Full deflection lands right on the part.
+func lock_point() -> Vector3:
+	var c: Vector3 = target.center()
+	var rig_t = target.rig
+	var p := c
+	p += (rig_t.part_point("head") - c) * maxf(0.0, -aim_offset.y)
+	p += (rig_t.part_point("leg") - c) * maxf(0.0, aim_offset.y)
+	p += (rig_t.part_point("arm") - c) * absf(aim_offset.x)
+	return p
 
 
 func add_shake(amount: float) -> void:
@@ -192,14 +207,12 @@ func _physics_process(delta: float) -> void:
 				speed = WALK_SPEED
 				noise = WALK_NOISE
 				move_mode = "Walking (quiet)"
-			elif target:
-				speed = LOCK_RUN_SPEED
-				noise = RUN_NOISE
-				move_mode = "Running (locked)"
 			else:
-				speed = RUN_SPEED
+				# The further you push, the faster you go: jog -> full sprint
+				var push := smoothstep(0.25, 0.95, input.length())
+				speed = lerpf(JOG_SPEED, LOCK_RUN_SPEED if target else RUN_SPEED, push)
 				noise = RUN_NOISE
-				move_mode = "Running (LOUD)"
+				move_mode = "Running"
 		else:
 			move_mode = "Crouching (silent)" if crouching else ("Aiming" if is_aiming() else "Standing")
 		want_v = dir * speed
@@ -208,7 +221,8 @@ func _physics_process(delta: float) -> void:
 			noise = maxf(noise, WALK_NOISE)
 			if dir == Vector3.ZERO:
 				move_mode = "Sidestepping"
-	var accel := ACCEL if roll_t <= 0.0 else 400.0
+	var speeding_up := Vector2(want_v.x, want_v.z).length() > Vector2(velocity.x, velocity.z).length()
+	var accel := (ACCEL if speeding_up else DECEL) if roll_t <= 0.0 else 400.0
 	if not is_on_floor():
 		accel *= 0.3
 	velocity.x = move_toward(velocity.x, want_v.x, accel * delta)
@@ -223,7 +237,6 @@ func _physics_process(delta: float) -> void:
 	var on_floor := is_on_floor()
 	if on_floor and not was_on_floor and air_time > 0.3:
 		get_tree().call_group("enemies", "hear_noise", global_position, LAND_NOISE, self)
-		Util.noise_ring(get_parent(), global_position, LAND_NOISE, Color(1, 0.5, 0.3, 0.4))
 		add_shake(0.6)
 		if city:
 			city.push_props(global_position, 6.0, Vector3.UP * 8.0)
@@ -247,19 +260,20 @@ func _physics_process(delta: float) -> void:
 		elif dir != Vector3.ZERO and roll_t <= 0.0:
 			face_to = dir
 		if face_to.length() > 0.1:
-			rig.rotation.y = lerp_angle(rig.rotation.y, atan2(face_to.x, face_to.z), clampf(TURN_SPEED * delta, 0.0, 1.0))
+			var turn := TURN_SPEED if target or manual else TURN_SPEED * lerpf(1.2, 0.7, rig.gait)
+			rig.rotation.y = lerp_angle(rig.rotation.y, atan2(face_to.x, face_to.z), clampf(turn * delta, 0.0, 1.0))
 
 	_update_mech(delta)
 	if rig.step_signal > 0.0 and noise > 0.0:
 		get_tree().call_group("enemies", "hear_noise", global_position, noise, self)
-		Util.noise_ring(get_parent(), global_position, noise, Color(1, 0.4, 0.3, 0.25) if noise >= RUN_NOISE else Color(1, 1, 1, 0.2))
-		add_shake(0.2 if is_running() else 0.05)
+		add_shake(0.06 * rig.gait)
 
 
 func _input_actions(delta: float, input: Vector2, look: Vector2) -> void:
 	locking = Input.is_action_pressed("lock")
 	manual = Input.is_action_pressed("aim") and not locking
 	fire_cd -= delta
+	fired_t += delta
 	if Input.is_action_just_pressed("reload"):
 		start_reload()
 	if Input.is_action_just_pressed("jump") and is_on_floor() and roll_t <= 0.0 and not crouching:
@@ -273,17 +287,15 @@ func _input_actions(delta: float, input: Vector2, look: Vector2) -> void:
 			_try_roll(Vector3.UP.cross(facing()) * -strafe)   # crouch + sidestep = side roll
 		else:
 			crouching = not crouching
-	# Pick a body part while locked: D-pad, or flick the right stick up/down
+	# Locked: the right stick (or touch drag) slides your aim over his body
 	if target:
-		if Input.is_action_just_pressed("part_next"):
-			cycle_part(1)
-		if Input.is_action_just_pressed("part_prev"):
-			cycle_part(-1)
-		if absf(look.y) > 0.7 and _flick_ready:
-			cycle_part(-1 if look.y > 0 else 1)
-			_flick_ready = false
-		elif absf(look.y) < 0.3:
-			_flick_ready = true
+		var want := (look + touch_aim).limit_length(1.0)
+		aim_offset = aim_offset.lerp(want, clampf(12.0 * delta, 0.0, 1.0))
+		part = target._part_at(lock_point()) if target.has_method("_part_at") else "body"
+	else:
+		aim_offset = Vector2.ZERO
+		touch_aim = Vector2.ZERO
+		part = "body"
 	if Input.is_action_pressed("fire") and fire_cd <= 0.0:
 		fire()
 
@@ -294,12 +306,6 @@ func _try_roll(d: Vector3) -> void:
 		get_tree().call_group("enemies", "hear_noise", global_position, 35.0, self)
 
 
-func cycle_part(step: int) -> void:
-	var i := PARTS.find(part)
-	part = PARTS[(i + step + PARTS.size()) % PARTS.size()]
-	lock *= 0.5   # re-settle on the new spot
-
-
 ## R1 locks the best target in front; holding keeps it. The lock tightens over time.
 func _update_target(delta: float) -> void:
 	if target and (not is_instance_valid(target) or target.dead or not locking or dead or not _can_lock(target)):
@@ -307,10 +313,15 @@ func _update_target(delta: float) -> void:
 	if locking and target == null and not dead:
 		target = _best_target()
 		lock = 0.0
-		part = "body"
+		aim_offset = Vector2.ZERO
 	if target:
-		var moving := Vector2(velocity.x, velocity.z).length() > 1.0
-		lock = minf(1.0, lock + delta / LOCK_TIME[part] * (0.6 if moving else 1.0))
+		# Settling is slow if you're moving, slower if he is, and a dodge roll shakes it
+		var you := 0.6 if Vector2(velocity.x, velocity.z).length() > 1.0 else 1.0
+		var tv: Vector3 = target.velocity
+		var him := 1.0 / (1.0 + Vector2(tv.x, tv.z).length() * 0.3)
+		lock = minf(1.0, lock + delta / LOCK_TIME * you * him)
+		if target.roll_t > 0.0:
+			lock = maxf(0.0, lock - delta * 2.5)
 	else:
 		lock = 0.0
 
@@ -344,13 +355,14 @@ func fire() -> void:
 			start_reload()
 		return
 	fire_cd = FIRE_RATE
+	fired_t = 0.0
 	var full: bool = target != null and lock >= 0.999
 	var spread := 2.5
 	var dmg := DAMAGE
 	var shot_part := "body"
 	if target:
-		spread = lerp(5.0, 0.3, lock)
-		shot_part = part
+		spread = lerp(4.5, 0.35, lock)
+		shot_part = "precise"   # whatever part the bullet actually lands on
 		if full:
 			dmg = FULL_LOCK_DAMAGE
 		if full and target.is_unaware():

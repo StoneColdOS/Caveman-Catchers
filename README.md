@@ -13,17 +13,16 @@ Built in Godot 4.7, for the AYN Thor handheld and phones.
 
 ## How it plays
 
-- **Syphon Filter movement:** push the stick and you run at full speed with long strides, heel kicks, arms pumping and the rifle swinging low. You run where you push, and the camera swings in behind you on its own. Hold WALK (L3) to sneak. L2/R2 sidestep without turning.
-- **Lock on (R1):** grabs the enemy in front. You can keep running anywhere (run and gun) while your upper body stays on him. The brackets close in white, then yellow, then red. A full red lock hits for double.
-- **Pick a part while locked** (D-pad up/down or flick the right stick):
-  - **HEAD:** triple damage. A full-lock headshot takes the head off.
-  - **ARM:** shoot the gun arm off and he's disarmed. He charges and tries to slam you; his visor flashes white before he swings.
-  - **LEG:** take a leg off at the knee and he crawls.
-  - **BODY:** normal damage.
-- **Manual aim (L1):** a tight over-the-shoulder crosshair that hits exactly where you point.
+- **Running:** you run where you push. The cycle is smooth and ramps from a jog (light push) up to a full sprint (full push), banking into turns. The camera sits centered behind you and swings in as you turn. Hold WALK (L3) to sneak; L2/R2 sidestep.
+- **Lock on (R1):** locks onto the enemy's whole body. While locked, the **right stick slides your aim dot** over him and the part under the dot is what you hit. Let go and it's back on center mass.
+  - **Up = HEAD:** triple damage, and the head can come off.
+  - **Sideways = ARM:** shoot the gun arm off and he's disarmed. He charges to slam you instead.
+  - **Down = LEG:** take a leg off at the knee and he crawls.
+- **Settling the lock:** the brackets close in white, then yellow, then red as your aim settles, and a full red lock hits for double. Enemies fight it: they jink side to side when you're on them and dodge-roll when you settle or open fire, which shakes your lock. Moving yourself slows it too.
+- **Manual aim (L1):** a precise crosshair that hits exactly where you point.
 - **Silent kill:** a full-lock shot on an enemy who hasn't noticed you.
-- **Enemies telegraph:** a red laser lands on you before every burst. Roll (B while moving) and bullets pass through you. B standing still crouches. A jumps.
-- **Destruction:** missed shots chew up buildings until they collapse. Rolling into a shop smashes through it.
+- **Enemies telegraph:** a red laser sight lands on you before every burst. Roll (B while moving) and bullets pass through you. B standing still crouches; A jumps.
+- **Destruction:** missed shots chew up buildings until they collapse.
 
 | | Thor / gamepad | Keyboard |
 |---|---|---|
@@ -31,7 +30,7 @@ Built in Godot 4.7, for the AYN Thor handheld and phones.
 | Walk (quiet) | Hold L3 | Hold Ctrl |
 | Camera | Right stick | Arrow keys |
 | Lock on (hold) | R1 | K |
-| Pick part while locked | D-pad up/down or flick right stick | Tab |
+| Aim at head / arm / leg while locked | Right stick | Arrow keys |
 | Manual aim (hold) | L1 | L |
 | Fire | X | J |
 | Sidestep | L2 / R2 | Q / E |

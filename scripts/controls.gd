@@ -5,7 +5,7 @@ extends RefCounted
 ##   Run         left stick  / WASD   (you run where you push; camera swings in behind)
 ##   Walk        L3 (hold)   / Ctrl   (quiet)
 ##   Camera      right stick / arrow keys
-##   Lock on     R1 (hold)   / K      (run and gun; D-pad up/down or flick right stick = pick HEAD/ARM/LEG/BODY)
+##   Lock on     R1 (hold)   / K      (run and gun; right stick slides your aim to head / arm / leg)
 ##   Manual aim  L1 (hold)   / L      (precise crosshair)
 ##   Fire        X           / J
 ##   Sidestep    L2 / R2     / Q / E
@@ -44,12 +44,6 @@ static func setup() -> void:
 	_action("strafe_right")
 	_key("strafe_right", KEY_E)
 	_axis("strafe_right", JOY_AXIS_TRIGGER_RIGHT, 1.0)
-
-	_action("part_next")
-	_key("part_next", KEY_TAB)
-	_button("part_next", JOY_BUTTON_DPAD_UP)
-	_action("part_prev")
-	_button("part_prev", JOY_BUTTON_DPAD_DOWN)
 
 	_action("roll")
 	_key("roll", KEY_C)

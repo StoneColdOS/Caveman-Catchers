@@ -2,7 +2,8 @@ extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick. Light push sneaks, full push runs.
 ##   Right side: drag anywhere empty to look around.
-##   Buttons:    Fire, Lock (toggle), Part (cycles HEAD/ARM/LEG/BODY), Roll/Crouch, Jump, Reload.
+##   Buttons:    Fire, Lock (toggle), Roll/Crouch, Jump, Reload.
+##   While locked on, dragging on the right slides your aim to head / arm / leg.
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -36,7 +37,6 @@ func _layout() -> void:
 		"lock":   {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "LOCK", "action": "lock", "toggle": true},
 		"roll":   {"pos": Vector2(right - 75, bottom - 120), "radius": r, "label": "ROLL", "action": "roll", "toggle": false},
 		"jump":   {"pos": Vector2(right - 245, bottom + 25), "radius": 38.0, "label": "JUMP", "action": "jump", "toggle": false},
-		"part":   {"pos": Vector2(right - 200, bottom - 105), "radius": 38.0, "label": "PART", "action": "part_next", "toggle": false},
 		"reload": {"pos": Vector2(right + 20, bottom - 215), "radius": 36.0, "label": "RELOAD", "action": "reload", "toggle": false},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 	}
@@ -95,7 +95,9 @@ func _touch_move(finger: int, pos: Vector2) -> void:
 	elif finger == look_finger:
 		var d := pos - look_last
 		look_last = pos
-		if player:
+		if player and player.target:
+			player.touch_aim = (player.touch_aim + d * 0.012).limit_length(1.0)
+		elif player:
 			player.yaw -= d.x * LOOK_SENSITIVITY
 			player.pitch = clamp(player.pitch - d.y * LOOK_SENSITIVITY, -1.2, 0.6)
 
@@ -107,6 +109,8 @@ func _touch_up(finger: int) -> void:
 		_apply_stick()
 	elif finger == look_finger:
 		look_finger = -1
+		if player:
+			player.touch_aim = Vector2.ZERO   # let go: aim springs back to center mass
 	elif button_fingers.has(finger):
 		var name: String = button_fingers[finger]
 		button_fingers.erase(finger)
@@ -158,9 +162,7 @@ func _draw() -> void:
 		draw_circle(b.pos, b.radius, fill)
 		draw_arc(b.pos, b.radius, 0, TAU, 40, Color(1, 1, 1, 0.65), 3.0)
 		var text: String = b.label
-		if name == "part" and player:
-			text = player.part.to_upper()
-		elif name == "roll" and player and player.crouching:
+		if name == "roll" and player and player.crouching:
 			draw_circle(b.pos, b.radius, Color(1, 0.85, 0.3, 0.55))
 			text = "CROUCH"
 		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
