@@ -2,7 +2,7 @@ extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick. Light push sneaks, full push runs.
 ##   Right side: drag anywhere empty to look around.
-##   Buttons:    Slash, Guard (hold), Dash, Stance (cycles), Lock.
+##   Buttons:    Fire, Aim (toggle: locks on), Roll, Crouch (toggle), Reload.
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -14,7 +14,7 @@ var stick_vec := Vector2.ZERO
 var look_finger := -1
 var look_last := Vector2.ZERO
 var button_fingers := {}       # finger index -> button name
-var toggles := {}
+var toggles := {"aim": false, "crouch": false}
 var buttons := {}              # name -> {pos, radius, label, action, toggle}
 
 
@@ -32,11 +32,11 @@ func _layout() -> void:
 	var right := s.x - 90.0
 	var bottom := s.y - 90.0
 	buttons = {
-		"slash":  {"pos": Vector2(right, bottom), "radius": 54.0, "label": "SLASH", "action": "slash", "toggle": false},
-		"guard":  {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "GUARD", "action": "guard", "toggle": false},
-		"dash":   {"pos": Vector2(right - 75, bottom - 120), "radius": r, "label": "DASH", "action": "dash", "toggle": false},
-		"stance": {"pos": Vector2(right + 20, bottom - 215), "radius": 40.0, "label": "STANCE", "action": "stance_cycle", "toggle": false},
-		"lock":   {"pos": Vector2(right - 245, bottom + 25), "radius": 36.0, "label": "LOCK", "action": "lock", "toggle": false},
+		"fire":   {"pos": Vector2(right, bottom), "radius": 54.0, "label": "FIRE", "action": "fire", "toggle": false},
+		"aim":    {"pos": Vector2(right - 130, bottom + 10), "radius": r, "label": "AIM", "action": "aim", "toggle": true},
+		"roll":   {"pos": Vector2(right - 75, bottom - 120), "radius": r, "label": "ROLL", "action": "roll", "toggle": false},
+		"crouch": {"pos": Vector2(right - 245, bottom + 25), "radius": 38.0, "label": "CROUCH", "action": "crouch", "toggle": false},
+		"reload": {"pos": Vector2(right + 20, bottom - 215), "radius": 36.0, "label": "RELOAD", "action": "reload", "toggle": false},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 	}
 	queue_redraw()
@@ -157,11 +157,8 @@ func _draw() -> void:
 		draw_circle(b.pos, b.radius, fill)
 		draw_arc(b.pos, b.radius, 0, TAU, 40, Color(1, 1, 1, 0.65), 3.0)
 		var text: String = b.label
-		if name == "stance" and player:
-			text = ["HIGH", "MID", "LOW"][player.stance]
-		elif name == "lock" and player and player.lock_target:
-			fill = Color(1, 0.3, 0.25, 0.55)
-			draw_circle(b.pos, b.radius, fill)
+		if name == "crouch" and player and player.crouching:
+			draw_circle(b.pos, b.radius, Color(1, 0.85, 0.3, 0.55))
 		var w := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
 		draw_string(font, b.pos + Vector2(-w / 2.0, 6), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color.WHITE)
 	# Phones held upright get a reminder

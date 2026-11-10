@@ -2,7 +2,7 @@ extends SceneTree
 ## Plays the core loop automatically and checks it works.
 ## Run: godot --headless --path . -s res://tests/test_catch.gd
 
-const Fighter := preload("res://scripts/fighter.gd")
+const Mech := preload("res://scripts/fighter.gd")
 
 var failures := 0
 
@@ -12,7 +12,7 @@ func _initialize() -> void:
 
 
 func _run() -> void:
-	Fighter.hitstop_enabled = false
+	Mech.hitstop_enabled = false
 	var main: Node = load("res://scenes/main.tscn").instantiate()
 	root.add_child(main)
 	await _frames(5)
@@ -24,179 +24,157 @@ func _run() -> void:
 	_check(city.buildings.size() > 25, "City built (%d buildings)" % city.buildings.size())
 	_check(player.rig.global_transform.basis.get_scale().y > 3.0, "Mech is giant-sized")
 	for e in es:
-		_freeze(e)
+		e.frozen = true
 
-	# --- 1. Backstab: sneak up behind an unaware mech, one cut.
+	# --- 1. Syphon movement: you face the camera, the stick strafes.
+	player.global_position = Vector3(-72, 0.2, 0)
+	player.yaw = PI           # camera behind, looking toward -Z... facing = yaw + PI
+	await _frames(30)
+	var f0: Vector3 = player.facing()
+	Input.action_press("move_right", 1.0)
+	await _frames(30)
+	Input.action_release("move_right")
+	var moved: Vector3 = player.velocity
+	_check(player.facing().dot(f0) > 0.95, "Strafing doesn't turn your mech")
+	_check(absf(moved.normalized().dot(f0)) < 0.3 and moved.length() > 2.0, "Right on the stick moves you sideways")
+	await _frames(20)
+
+	# --- 2. Hold aim: locks onto the enemy in front, lock tightens over time.
 	var e0 = es[0]
-	_place_behind(player, e0, 7.0)
+	_place_facing(player, e0, 40.0, true)
+	await _frames(20)
+	Input.action_press("aim")
+	await _frames(3)
+	_check(player.target == e0, "Holding AIM locks onto the enemy in front")
+	var l0: float = player.lock
+	await _frames(30)
+	_check(player.lock > l0, "Lock tightens while you hold it")
+	await _frames(40)
+	_check(player.lock >= 0.999, "Standing still you reach a full lock")
+
+	# --- 3. Full-lock shot on an unaware enemy: one-shot kill.
+	_check(e0.is_unaware(), "He hasn't noticed you")
+	player.fire()
 	await _frames(2)
-	_check(e0.is_unaware(), "Enemy hasn't noticed you behind him")
-	player.set_stance(player.Stance.MID)
-	player.start_swing()
-	await _swing_done(player)
-	_check(e0.dead, "Cut from behind: one hit takes him down")
+	_check(e0.dead, "Full-lock shot on an unaware mech: SILENT KILL")
 	_check(main.downed == 1, "Counter goes up")
+	Input.action_release("aim")
+	await _frames(5)
 
-	# --- 2. Seen from the front: suspicious, then a duel.
+	# --- 4. Aware enemy: shots chip his armor; full lock hits harder.
 	var e1 = es[1]
+	_place_facing(player, e1, 35.0, false)
+	e1.state = e1.State.COMBAT
+	await _frames(3)
+	Input.action_press("aim")
+	await _frames(3)
+	player.lock = 0.0
+	player.fire_cd = 0.0
+	var hp0: int = e1.hp
+	var tries := 0
+	while e1.hp == hp0 and tries < 12:
+		player.fire_cd = 0.0
+		player.lock = 0.0
+		player.fire()
+		tries += 1
+		await _frames(2)
+	_check(e1.hp == hp0 - player.DAMAGE, "Loose shot hits for %d (took %d tries)" % [player.DAMAGE, tries])
+	player.lock = 1.0
+	var hp1: int = e1.hp
+	player.fire()
+	await _frames(2)
+	_check(e1.hp == hp1 - player.FULL_LOCK_DAMAGE, "Full-lock shot hits for double")
+	_check(e1.bar.visible, "His health bar shows once he's hurt")
+	_check(player.ammo < player.mag_size, "Shooting uses ammo")
+	Input.action_release("aim")
+
+	# --- 5. Reload.
+	player.ammo = 0
+	player.fire()
+	_check(player.reload_t > 0.0, "Empty magazine: auto reload")
+	await _frames(int(player.reload_time * 60) + 5)
+	_check(player.ammo == player.mag_size, "Reload refills the magazine")
+
+	# --- 6. Enemy telegraphs with a laser, then bursts. Rolling dodges.
 	e1.frozen = false
-	_place_front(player, e1, 25.0)
-	await _frames(10)
-	_check(e1.state == e1.State.SUSPICIOUS or e1.state == e1.State.DUEL, "He sees you and gets suspicious")
-	await _frames(120)
-	_check(e1.is_dueling(), "Spotted: he squares up for a duel")
-	await _frames(2)
-	_check(player.lock_target == e1, "Your mech locks on to him")
+	e1.fire_cd = 0.0
+	var laser_seen := false
+	var hpp: int = player.hp
+	for i in 150:
+		await physics_frame
+		if e1.laser.visible:
+			laser_seen = true
+		if player.hp < hpp:
+			break
+	_check(laser_seen, "His laser sight warns you before he fires")
+	_check(player.hp < hpp, "His burst hits you if you stand still")
+	await _frames(30)
+	player.hp = player.MAX_HP
+	var hp_before: int = player.hp
+	player.start_roll(Vector3.RIGHT)
+	player.take_shot(e1, 5, player.center())
+	_check(player.hp == hp_before, "Bullets pass through you mid-roll")
+	await _frames(40)
 	e1.frozen = true
-	e1.velocity = Vector3.ZERO
 
-	# --- 3. Guard blocks MID and LOW; HIGH breaks it.
-	_reset(e1)
-	e1.state = e1.State.DUEL
-	_place_front(player, e1, 8.0)
-	await _frames(2)
-	e1.guarding = true
-	player.set_stance(player.Stance.MID)
-	player.start_swing()
-	await _swing_done(player)
-	_check(e1.hp == e1.MAX_HP and player.stagger > 0.0, "Guard blocks a MID cut and you recoil")
-	await _frames(40)
-	_reset(e1)
-	e1.state = e1.State.DUEL
-	e1.guarding = true
-	player.set_stance(player.Stance.HIGH)
-	player.start_swing()
-	await _swing_done(player)
-	_check(e1.hp == e1.MAX_HP and e1.stagger > 0.0 and not e1.guarding, "HIGH cut smashes through his guard (guard break)")
-	await _frames(70)
-
-	# --- 4. LOW cripples, MID finishes.
-	_reset(e1)
-	e1.state = e1.State.DUEL
-	_place_front(player, e1, 8.0)
-	await _frames(2)
-	player.set_stance(player.Stance.LOW)
-	player.start_swing()
-	await _swing_done(player)
-	_check(e1.crippled and e1.hp == e1.MAX_HP - 1, "LOW cut cripples his leg")
-	await _frames(40)
-	e1.stagger = 0.0
-	_place_front(player, e1, 8.0)   # step back in after knocking him back
-	await _frames(2)
-	player.set_stance(player.Stance.MID)
-	player.start_swing()
-	await _swing_done(player)
-	_check(e1.dead, "Follow up with MID: he's down")
-
-	# --- 5. Two blades at once clash.
-	var e2 = es[2]
-	_reset(e2)
-	e2.state = e2.State.DUEL
-	_place_front(player, e2, 8.0)
-	await _frames(2)
-	e2.swing = e2.SWING_STRIKE
-	var r: String = e2.receive_strike(player, player.Stance.MID)
-	_check(r == "clash" and e2.hp == e2.MAX_HP, "Strikes landing together clash")
-	await _frames(40)
-
-	# --- 6. His swing hits you if you stand there; guard blocks it.
-	_reset(e2)
-	e2.state = e2.State.DUEL
-	player.stagger = 0.0
-	var hp0: int = player.hp
-	e2.set_stance(e2.Stance.MID)
-	e2.start_swing()
-	await _swing_done(e2)
-	_check(player.hp == hp0 - 2, "His MID cut hits you for 2")
-	await _frames(40)
-	player.stagger = 0.0
-	e2.stagger = 0.0
-	_place_front(player, e2, 8.0)
-	Input.action_press("guard")
-	await _frames(2)
-	e2.start_swing()
-	await _swing_done(e2)
-	Input.action_release("guard")
-	_check(player.hp == hp0 - 2 and e2.stagger > 0.0, "Holding guard blocks it and he recoils")
-	await _frames(40)
-
-	# --- 7. Stance switching.
-	player.set_stance(player.Stance.MID)
-	Input.action_press("stance_cycle")
-	await _frames(2)
-	Input.action_release("stance_cycle")
-	_check(player.stance == player.Stance.HIGH, "Stance button cycles MID -> HIGH")
-	Input.action_press("stance_low")
-	await _frames(2)
-	Input.action_release("stance_low")
-	_check(player.stance == player.Stance.LOW, "D-pad down picks LOW")
-
-	# --- 8. Destruction: your sword cuts through a building.
+	# --- 7. Cover: a building between you blocks his sight.
 	var b: Node3D = null
 	for cand in city.buildings:
-		if cand.global_position.distance_to(e2.global_position) > 30.0:
+		if cand.get_meta("half").y * 2.0 > 9.0:
 			b = cand
 			break
 	var half: Vector3 = b.get_meta("half")
-	player.global_position = Vector3(b.global_position.x, 0.2, b.global_position.z + half.z + 6.0)
-	player.rig.rotation.y = PI
-	player.lock_enabled = false
-	player.lock_target = null
+	e1.global_position = b.global_position + Vector3(0, -b.global_position.y + 0.2, half.z + 12.0)
+	player.global_position = b.global_position + Vector3(0, -b.global_position.y + 0.2, -half.z - 8.0)
+	e1.heading = PI
+	e1.rig.rotation.y = PI
 	await _frames(3)
-	var n0: int = city.buildings.size()
-	player.set_stance(player.Stance.MID)
-	player.start_swing()
-	await _swing_done(player)
-	_check(city.buildings.size() < n0 and not is_instance_valid(b) or b.is_queued_for_deletion(), "Sword cut brings a building down")
-	await _frames(5)
-	_check(city.debris.size() > 3, "It collapses into chunks (%d)" % city.debris.size())
+	_check(not e1.can_see_player(), "A building between you is cover")
 
-	# --- 9. Charging into a low building smashes through it; tall ones hold.
-	var low: Node3D = null
-	var tall: Node3D = null
-	for cand in city.buildings:
-		var hh: float = cand.get_meta("half").y * 2.0
-		if hh < 9.0 and low == null:
-			low = cand
-		if hh > 16.0 and tall == null:
-			tall = cand
-	_check(city.smash(low, low.global_position + Vector3(0, 0, 20), 12.0), "Running into a low shop smashes it")
-	_check(tall == null or not city.smash(tall, tall.global_position + Vector3(0, 0, 20), 12.0), "Tall buildings need the sword")
-
-	# --- 10. Props go flying when a mech walks into them.
+	# --- 8. Shots wreck buildings.
+	var hb: int = b.get_meta("hp")
+	for i in hb:
+		city.shoot_building(b, b.global_position, player.global_position)
+	await _frames(3)
+	_check(not city.buildings.has(b), "Enough hits bring a building down (%d)" % hb)
+	_check(city.debris.size() > 3, "It collapses into chunks")
 	var prop: RigidBody3D = city.props[0]
-	_check(prop.freeze, "Props stand still until touched")
-	var pushed: int = city.push_props(prop.global_position + Vector3(1, 0, 0), 1.8, Vector3(-6, 0, 0))
-	_check(pushed > 0 and not prop.freeze, "Walking into a prop knocks it flying")
+	city.shot_props(prop.global_position + Vector3(-20, 1, 0), prop.global_position + Vector3(20, 1, 0))
+	_check(not prop.freeze, "Stray shots knock props over")
 
-	# --- 11. Hearing: loud stomps get investigated, collapses carry far.
-	var listener = e2
-	_reset(listener)
-	listener.state = listener.State.PATROL
-	listener.hear_noise(listener.global_position + Vector3(30, 0, 0), player.WALK_NOISE, player)
-	_check(listener.state == listener.State.PATROL, "Quiet walking 30 m away goes unheard")
-	listener.hear_noise(listener.global_position + Vector3(30, 0, 0), player.RUN_NOISE, player)
-	_check(listener.state == listener.State.INVESTIGATE, "Running 30 m away gets him investigating")
+	# --- 9. Rolling into a low building smashes it.
+	var low: Node3D = null
+	for cand in city.buildings:
+		if cand.get_meta("half").y * 2.0 < 9.0:
+			low = cand
+			break
+	_check(city.smash(low, low.global_position + Vector3(0, 0, 20), player.ROLL_SPEED), "Rolling into a low shop smashes it")
 
-	# --- 12. Dash.
-	player.global_position = Vector3(-72, 0.2, 0)
-	player.velocity = Vector3.ZERO
-	player.stagger = 0.0
-	await _frames(40)
-	player.dash_cd = 0.0
-	var p0: Vector3 = player.global_position
-	player.dash()
-	await _frames(20)
-	_check(player.global_position.distance_to(p0) > 4.0, "Dash bursts you across the street")
+	# --- 10. Hearing.
+	var e2 = es[2]
+	e2.state = e2.State.PATROL
+	e2.hear_noise(e2.global_position + Vector3(30, 0, 0), player.WALK_NOISE, player)
+	_check(e2.state == e2.State.PATROL, "Walking 30 m away goes unheard")
+	e2.hear_noise(e2.global_position + Vector3(30, 0, 0), player.JOG_NOISE, player)
+	_check(e2.state == e2.State.INVESTIGATE, "Jogging 30 m away gets him investigating")
 
-	# --- 13. Lose all your armor: defeated.
+	# --- 11. Crouch: quieter and harder to spot.
+	player.crouching = false
+	var e2_far: float = e2.SIGHT_RANGE
+	Input.action_press("crouch")
+	await _frames(2)
+	Input.action_release("crouch")
+	_check(player.crouching, "Crouch toggles on")
+
+	# --- 12. Armor gone: game over.
+	player.crouching = false
 	while not player.dead:
-		player.stagger = 0.0
-		player.receive_strike(e2, player.Stance.HIGH)
+		player.roll_t = 0.0
+		player.take_shot(e2, 5, player.center())
 	await _frames(2)
 	_check(player.dead and main.game_over, "Armor gone: DEFEATED")
 
-	# --- 14. Touch controls drive the same actions.
+	# --- 13. Touch controls.
 	var TouchScript := load("res://scripts/touch_controls.gd")
 	var t: Control = TouchScript.new()
 	t.player = player
@@ -204,59 +182,32 @@ func _run() -> void:
 	await _frames(2)
 	t._touch_down(0, Vector2(100, 600))
 	t._touch_move(0, Vector2(100 + t.STICK_RADIUS, 600))
-	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = run")
-	t._touch_move(0, Vector2(100 + t.STICK_RADIUS * 0.4, 600))
-	var st := Input.get_action_strength("move_right")
-	_check(st > 0.3 and st < 0.5, "Touch joystick: light push = walk")
+	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push = jog")
 	t._touch_up(0)
-	for name in ["slash", "guard", "dash", "stance", "lock"]:
+	for name in ["fire", "roll", "reload", "crouch"]:
 		t._touch_down(1, t.buttons[name].pos)
 		var ok := Input.is_action_pressed(t.buttons[name].action)
 		t._touch_up(1)
 		_check(ok, "Touch %s button works" % name.to_upper())
+	t._touch_down(1, t.buttons["aim"].pos)
+	t._touch_up(1)
+	_check(Input.is_action_pressed("aim"), "Touch AIM toggles on (stays locked)")
+	t._touch_down(1, t.buttons["aim"].pos)
+	t._touch_up(1)
+	_check(not Input.is_action_pressed("aim"), "...and off")
 
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)
 
 
-func _freeze(e) -> void:
-	e.frozen = true
-	e.velocity = Vector3.ZERO
-
-
-func _reset(e) -> void:
-	e.hp = e.MAX_HP
-	e.crippled = false
-	e.stagger = 0.0
-	e.guarding = false
-	e.swing = e.SWING_NONE
-	e.frozen = true
-	e.velocity = Vector3.ZERO
-
-
-## Player stands `dist` behind the enemy, both facing the same way.
-func _place_behind(player, e, dist: float) -> void:
-	e.heading = 0.0
-	e.rig.rotation.y = 0.0
+## Player stands `dist` from the enemy, facing him. Enemy faces away (unaware) or toward.
+func _place_facing(player, e, dist: float, behind: bool) -> void:
+	e.heading = 0.0 if behind else PI
+	e.rig.rotation.y = e.heading
 	player.global_position = e.global_position + Vector3(0, 0, -dist)
+	player.yaw = PI          # facing +Z toward him
 	player.rig.rotation.y = 0.0
 	player.velocity = Vector3.ZERO
-
-
-## Player and enemy face each other, `dist` apart.
-func _place_front(player, e, dist: float) -> void:
-	e.heading = PI
-	e.rig.rotation.y = PI
-	player.global_position = e.global_position + Vector3(0, 0, -dist)
-	player.rig.rotation.y = 0.0
-	player.velocity = Vector3.ZERO
-
-
-func _swing_done(f) -> void:
-	for i in 200:
-		await physics_frame
-		if f.swing == f.SWING_RECOVER or f.swing == f.SWING_NONE:
-			break
 
 
 func _frames(n: int) -> void:

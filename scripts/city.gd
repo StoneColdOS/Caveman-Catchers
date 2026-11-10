@@ -4,8 +4,8 @@ extends Node3D
 ##
 ## Destruction:
 ##   - Vending machines, cars, poles, lamps and bikes go flying when a mech walks into them.
-##   - A sword strike cuts down any building it passes through.
-##   - Running or dashing into a low building smashes through it.
+##   - Bullets chip buildings; enough hits and the building comes down. Misses count.
+##   - Running or rolling into a low building smashes through it.
 ##   - Buildings collapse into tumbling chunks and leave rubble. It's LOUD: every
 ##     enemy mech within earshot comes to look.
 
@@ -149,6 +149,7 @@ func _building(center: Vector3, size: Vector3, kind: String) -> void:
 	body.set_meta("half", size / 2.0)
 	body.set_meta("color", color)
 	body.set_meta("kind", kind)
+	body.set_meta("hp", clampi(int(size.x * size.y * size.z / 300.0), 6, 30))
 	body.add_to_group("breakable")
 	var shape := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
@@ -302,14 +303,14 @@ func _backdrop() -> void:
 				pos = Vector3(-HALF - 14, h / 2.0, a)
 			else:
 				pos = Vector3(HALF + 14, h / 2.0, a)
-			add_child(Util.mesh(Util.box(Vector3(w, h, w)), Color(0.25, 0.26, 0.3), pos, false, TEX))
+			add_child(Util.mesh(Util.box(Vector3(w, h, w)), Color(0.34, 0.33, 0.42), pos, false, TEX))
 			var lit: Array = []
 			for k in 10:
 				lit.append([Vector3(1.2, 1.0, w + 0.1), Vector3(rng.randf_range(-w / 2 + 1, w / 2 - 1), rng.randf_range(-h / 2 + 2, h / 2 - 2), 0)])
 				lit.append([Vector3(w + 0.1, 1.0, 1.2), Vector3(0, rng.randf_range(-h / 2 + 2, h / 2 - 2), rng.randf_range(-w / 2 + 1, w / 2 - 1))])
 			var lm := MeshInstance3D.new()
 			lm.mesh = Util.merged_boxes(lit)
-			lm.material_override = Util.mat(Color(1.0, 0.85, 0.55), true)
+			lm.material_override = Util.mat(Color(0.55, 0.45, 0.32), true)   # dim, so they sit in the haze
 			lm.position = pos
 			add_child(lm)
 			a += w + rng.randf_range(1.0, 4.0)
@@ -455,7 +456,7 @@ func cut(point: Vector3, radius: float, from: Vector3) -> bool:
 	return hit
 
 
-## A mech ran into this building. Low ones give way; tall ones need the sword.
+## A mech rolled into this building. Low ones give way; tall ones need gunfire.
 func smash(b: Node, from: Vector3, speed: float) -> bool:
 	if not buildings.has(b) or speed < 7.0:
 		return false
@@ -464,6 +465,102 @@ func smash(b: Node, from: Vector3, speed: float) -> bool:
 		return false
 	collapse(b, from)
 	return true
+
+
+## A bullet hit a building: chips fly, and it comes down when it runs out of hits.
+func shoot_building(b: Node3D, at: Vector3, from: Vector3) -> void:
+	if not buildings.has(b):
+		return
+	var hp: int = b.get_meta("hp") - 1
+	b.set_meta("hp", hp)
+	var color: Color = b.get_meta("color")
+	var away := (from - at).normalized()
+	for i in 2:
+		var rb := RigidBody3D.new()
+		rb.collision_layer = Util.LAYER_DEBRIS
+		rb.collision_mask = Util.LAYER_WORLD
+		var shape := CollisionShape3D.new()
+		var bs := BoxShape3D.new()
+		bs.size = Vector3.ONE * 0.8
+		shape.shape = bs
+		rb.add_child(shape)
+		var mi := MeshInstance3D.new()
+		mi.mesh = Util.box(Vector3.ONE * 0.8)
+		mi.material_override = Util.mat(color.darkened(0.2))
+		rb.add_child(mi)
+		add_child(rb)
+		rb.global_position = at + away * 0.6
+		_launch(rb, away * rng.randf_range(4, 9) + Vector3(rng.randf_range(-3, 3), rng.randf_range(2, 6), rng.randf_range(-3, 3)))
+	if hp <= 0:
+		collapse(b, from)
+
+
+## Props near a bullet's path get knocked over.
+func shot_props(from: Vector3, to: Vector3) -> void:
+	var seg := to - from
+	var len := seg.length()
+	if len < 0.1:
+		return
+	var dir := seg / len
+	for i in range(props.size() - 1, -1, -1):
+		var p: RigidBody3D = props[i]
+		if not is_instance_valid(p):
+			props.remove_at(i)
+			continue
+		var c := p.global_position + Vector3.UP * float(p.get_meta("radius"))
+		var t := clampf((c - from).dot(dir), 0.0, len)
+		if (from + dir * t).distance_to(c) < float(p.get_meta("radius")) + 0.5:
+			props.remove_at(i)
+			_launch(p, dir * 14.0 + Vector3.UP * 5.0)
+
+
+## Bright streak from muzzle to impact for a split second.
+func tracer(from: Vector3, to: Vector3, color: Color) -> void:
+	var len := from.distance_to(to)
+	if len < 0.5:
+		return
+	var mi := MeshInstance3D.new()
+	mi.mesh = Util.box(Vector3(0.12, 0.12, len))
+	mi.material_override = Util.mat(color, true)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	mi.global_position = (from + to) * 0.5
+	mi.look_at(to, Vector3.UP if absf((to - from).normalized().y) < 0.98 else Vector3.RIGHT)
+	var tw := mi.create_tween()
+	tw.tween_property(mi, "scale", Vector3(0.2, 0.2, 1.0), 0.07)
+	tw.tween_callback(mi.queue_free)
+
+
+## Spark puff where a bullet lands. Hits on mechs are bigger and hotter.
+func impact(at: Vector3, on_mech: bool) -> void:
+	var n := 6 if on_mech else 3
+	var c := Color(1.0, 0.6, 0.2) if on_mech else Color(0.9, 0.85, 0.7)
+	for i in n:
+		var sp := MeshInstance3D.new()
+		sp.mesh = Util.box(Vector3.ONE * (0.5 if on_mech else 0.3))
+		sp.material_override = Util.mat(c, true)
+		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sp)
+		sp.global_position = at
+		var tw := sp.create_tween()
+		tw.tween_property(sp, "global_position", at + Vector3(rng.randf_range(-1, 1), rng.randf_range(0, 1), rng.randf_range(-1, 1)) * (3.0 if on_mech else 1.5), 0.22)
+		tw.parallel().tween_property(sp, "scale", Vector3.ONE * 0.1, 0.22)
+		tw.tween_callback(sp.queue_free)
+
+
+## Mech goes down: a fireball of chunky cubes.
+func burst(at: Vector3) -> void:
+	for i in 18:
+		var sp := MeshInstance3D.new()
+		sp.mesh = Util.box(Vector3.ONE * rng.randf_range(0.8, 1.8))
+		sp.material_override = Util.mat([Color(1.0, 0.75, 0.2), Color(1.0, 0.4, 0.1), Color(0.9, 0.2, 0.1)][i % 3], true)
+		sp.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(sp)
+		sp.global_position = at
+		var tw := sp.create_tween()
+		tw.tween_property(sp, "global_position", at + Vector3(rng.randf_range(-1, 1), rng.randf_range(-0.3, 1), rng.randf_range(-1, 1)).normalized() * rng.randf_range(4.0, 9.0), 0.45)
+		tw.parallel().tween_property(sp, "scale", Vector3.ONE * 0.1, 0.45)
+		tw.tween_callback(sp.queue_free)
 
 
 func _overlaps(b: Node3D, point: Vector3, radius: float) -> bool:

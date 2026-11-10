@@ -1,15 +1,15 @@
 extends RefCounted
 ## Sets up controls in code so they work on keyboard and on the Thor's gamepad.
+## Syphon Filter style: hold to aim/lock, tap to fire, roll to dodge.
 ##
-##   Move        left stick  / WASD   (light tilt = quiet walk, full tilt = loud run)
+##   Move        left stick  / WASD   (light tilt = quiet walk, full tilt = jog)
 ##   Walk                    / hold Ctrl
-##   Camera      right stick / arrow keys
-##   Slash       X or R2     / J
-##   Guard       L1 or L2    / K (hold)
-##   Dash        A           / Space  (cancels a windup: feint)
-##   Stance      Y cycles    / I cycles, or 1 / 2 / 3
-##               D-pad up = HIGH, left/right = MID, down = LOW
-##   Lock-on     R1 or R3    / Tab    (toggle)
+##   Turn/look   right stick / arrow keys
+##   Aim (hold)  L1 or L2    / K      (locks onto the enemy nearest your crosshair)
+##   Fire        R1 or R2    / J
+##   Roll        A           / Space  (bullets pass through you mid-roll)
+##   Crouch      B           / C      (toggle; silent, harder to see)
+##   Reload      X           / R
 ##   Restart     Start       / Enter
 
 
@@ -24,38 +24,27 @@ static func setup() -> void:
 	_action("look_up");    _key("look_up", KEY_UP);       _axis("look_up", JOY_AXIS_RIGHT_Y, -1.0)
 	_action("look_down");  _key("look_down", KEY_DOWN);   _axis("look_down", JOY_AXIS_RIGHT_Y, 1.0)
 
-	_action("slash")
-	_key("slash", KEY_J)
-	_button("slash", JOY_BUTTON_X)
-	_axis("slash", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+	_action("aim")
+	_key("aim", KEY_K)
+	_button("aim", JOY_BUTTON_LEFT_SHOULDER)
+	_axis("aim", JOY_AXIS_TRIGGER_LEFT, 1.0)
 
-	_action("guard")
-	_key("guard", KEY_K)
-	_button("guard", JOY_BUTTON_LEFT_SHOULDER)
-	_axis("guard", JOY_AXIS_TRIGGER_LEFT, 1.0)
+	_action("fire")
+	_key("fire", KEY_J)
+	_button("fire", JOY_BUTTON_RIGHT_SHOULDER)
+	_axis("fire", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
-	_action("dash")
-	_key("dash", KEY_SPACE)
-	_button("dash", JOY_BUTTON_A)
+	_action("roll")
+	_key("roll", KEY_SPACE)
+	_button("roll", JOY_BUTTON_A)
 
-	_action("stance_cycle")
-	_key("stance_cycle", KEY_I)
-	_button("stance_cycle", JOY_BUTTON_Y)
-	_action("stance_high")
-	_key("stance_high", KEY_1)
-	_button("stance_high", JOY_BUTTON_DPAD_UP)
-	_action("stance_mid")
-	_key("stance_mid", KEY_2)
-	_button("stance_mid", JOY_BUTTON_DPAD_LEFT)
-	_button("stance_mid", JOY_BUTTON_DPAD_RIGHT)
-	_action("stance_low")
-	_key("stance_low", KEY_3)
-	_button("stance_low", JOY_BUTTON_DPAD_DOWN)
+	_action("crouch")
+	_key("crouch", KEY_C)
+	_button("crouch", JOY_BUTTON_B)
 
-	_action("lock")
-	_key("lock", KEY_TAB)
-	_button("lock", JOY_BUTTON_RIGHT_SHOULDER)
-	_button("lock", JOY_BUTTON_RIGHT_STICK)
+	_action("reload")
+	_key("reload", KEY_R)
+	_button("reload", JOY_BUTTON_X)
 
 	_action("walk")
 	_key("walk", KEY_CTRL)

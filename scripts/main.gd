@@ -1,6 +1,6 @@
 extends Node3D
 ## Mech Mania: builds the night-time Tokyo neighborhood (heavy PSX look), your mech,
-## the enemy mechs and the HUD.
+## the enemy mechs and the HUD (lock-on reticle, ammo, armor).
 
 const Util := preload("res://scripts/util.gd")
 const Controls := preload("res://scripts/controls.gd")
@@ -12,7 +12,6 @@ const TouchScript := preload("res://scripts/touch_controls.gd")
 
 const PLAYER_SPAWN := Vector3(-72, 0.2, 72)
 const ENEMY_SPAWNS := [Vector3(24, 0.2, -24), Vector3(72, 0.2, 24), Vector3(-24, 0.2, -72)]
-const STANCE_NAMES := ["HIGH", "MID", "LOW"]
 
 var player: CharacterBody3D
 var city: Node3D
@@ -21,7 +20,9 @@ var game_over := false
 var count_label: Label
 var mode_label: Label
 var alert_label: Label
-var stance_label: Label
+var ammo_label: Label
+var reticle: Control
+var hurt_rect: ColorRect
 var result_label: Label
 var hint_label: Label
 var message_label: Label
@@ -113,8 +114,8 @@ func _spawn_player() -> void:
 	player.position = PLAYER_SPAWN
 	add_child(player)
 	player.city = city
-	player.rig.rotation.y = PI * 0.75   # facing into the city
-	player.yaw = player.rig.rotation.y + PI
+	player.yaw = PI * 0.75 + PI   # facing into the city
+	player.rig.rotation.y = player.yaw + PI
 	player.killed.connect(_on_player_killed)
 
 
@@ -158,6 +159,16 @@ func _label(size: int, pos: Vector2, parent: Node) -> Label:
 func _build_hud() -> void:
 	var layer := CanvasLayer.new()
 	add_child(layer)
+	hurt_rect = ColorRect.new()
+	hurt_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	hurt_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hurt_rect.color = Color(0.8, 0.0, 0.0, 0.0)
+	layer.add_child(hurt_rect)
+	reticle = Control.new()
+	reticle.set_anchors_preset(Control.PRESET_FULL_RECT)
+	reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	reticle.draw.connect(_draw_reticle)
+	layer.add_child(reticle)
 	count_label = _label(34, Vector2(24, 18), layer)
 	mode_label = _label(24, Vector2(24, 62), layer)
 	var armor_text := _label(20, Vector2(24, 100), layer)
@@ -175,7 +186,7 @@ func _build_hud() -> void:
 	bg.bg_color = Color(0, 0, 0, 0.6)
 	armor_bar.add_theme_stylebox_override("background", bg)
 	layer.add_child(armor_bar)
-	stance_label = _label(30, Vector2(24, 136), layer)
+	ammo_label = _label(30, Vector2(24, 136), layer)
 
 	alert_label = Label.new()
 	alert_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
@@ -198,7 +209,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "Move: L-stick  Slash: X/R2  Guard: L1/L2  Dash: A  Stance: Y or D-pad  Lock: R1  Restart: Start"
+	hint_label.text = "Move: L-stick  Turn: R-stick  Aim/lock: L1/L2 (hold)  Fire: R1/R2  Roll: A  Crouch: B  Reload: X  Restart: Start"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44
@@ -228,33 +239,77 @@ func _update_hud_live(delta: float) -> void:
 	if player == null or armor_bar == null:
 		return
 	armor_bar.value = player.hp
-	mode_label.text = player.move_mode + ("   |   CRIPPLED" if player.crippled else "")
-	mode_label.modulate = Color(1, 0.45, 0.35) if player.move_mode.begins_with("Running") else Color.WHITE
-	var parts: PackedStringArray = []
-	for i in 3:
-		parts.append("[%s]" % STANCE_NAMES[i] if i == player.stance else STANCE_NAMES[i])
-	stance_label.text = "STANCE  " + "  ".join(parts) + ("   LOCK" if player.lock_target else "")
+	mode_label.text = player.move_mode
+	mode_label.modulate = Color(1, 0.45, 0.35) if player.move_mode.begins_with("Jogging") else (Color(0.6, 1, 0.7) if player.move_mode.contains("silent") else Color.WHITE)
+	ammo_label.text = ("RELOADING..." if player.reload_t > 0.0 else "AMMO  %d / %d" % [player.ammo, player.mag_size])
+	ammo_label.modulate = Color(1, 0.6, 0.3) if player.reload_t > 0.0 or player.ammo <= 3 else Color.WHITE
+	hurt_rect.color.a = player.hurt * 0.35
+	reticle.queue_redraw()
 
-	var dueling := false
+	var fighting := false
 	for e in get_tree().get_nodes_in_group("enemies"):
-		if e.is_dueling():
-			dueling = true
-	if dueling and not player.dead:
-		alert_label.text = "! DUEL !"
+		if e.is_fighting():
+			fighting = true
+	if fighting and not player.dead:
+		alert_label.text = "! COMBAT !"
 		alert_label.modulate = Color(1, 0.25, 0.2) if Time.get_ticks_msec() % 600 < 400 else Color(1, 0.6, 0.5)
 	else:
 		alert_label.text = ""
 
 	# Flash what your last strike did
 	if player.last_result != "":
-		var words := {"hit": "HIT", "kill": "CUT DOWN", "backstab": "ASSASSINATED", "block": "BLOCKED", "break": "GUARD BREAK", "clash": "CLASH"}
+		var words := {"crit": "CRITICAL", "kill": "MECH DOWN", "silent": "SILENT KILL"}
 		result_label.text = words.get(player.last_result, "")
-		result_label.modulate = Color(1, 0.85, 0.4) if player.last_result in ["kill", "backstab", "break"] else Color.WHITE
+		result_label.modulate = Color(1, 0.85, 0.4) if player.last_result != "crit" else Color(1, 0.5, 0.4)
 		player.last_result = ""
 		result_timer = 1.0
 	result_timer -= delta
 	if result_timer <= 0.0:
 		result_label.text = ""
+
+
+## Crosshair, or lock brackets around your target that close in as the lock settles.
+## White = loose, yellow = getting there, red = full lock (double damage).
+func _draw_reticle() -> void:
+	if player == null or player.dead:
+		return
+	var cam: Camera3D = player.camera
+	var size := reticle.get_viewport_rect().size
+	var hm: float = player.hit_marker
+	if player.target and is_instance_valid(player.target):
+		var p3: Vector3 = player.target.center()
+		if cam.is_position_behind(p3):
+			return
+		var p := cam.unproject_position(p3)
+		var l: float = player.lock
+		var c := Color(1, 1, 1).lerp(Color(1, 0.9, 0.2), clampf(l * 2.0, 0, 1)).lerp(Color(1, 0.15, 0.1), clampf(l * 2.0 - 1.0, 0, 1))
+		if l >= 0.999:
+			c = Color(1, 0.1, 0.1)
+		var r: float = lerp(90.0, 26.0, l)
+		var arm := r * 0.45
+		for sx in [-1.0, 1.0]:
+			for sy in [-1.0, 1.0]:
+				var corner := p + Vector2(sx * r, sy * r)
+				reticle.draw_line(corner, corner - Vector2(sx * arm, 0), c, 4.0)
+				reticle.draw_line(corner, corner - Vector2(0, sy * arm), c, 4.0)
+		if l >= 0.999:
+			reticle.draw_circle(p, 5.0, c)
+		if hm > 0.0:
+			_hit_x(p, Color(1, 1, 1, hm * 5.0))
+	else:
+		var p := size * 0.5
+		var c := Color(1, 1, 1, 0.75) if player.is_aiming() else Color(1, 1, 1, 0.35)
+		reticle.draw_line(p + Vector2(-14, 0), p + Vector2(-5, 0), c, 3.0)
+		reticle.draw_line(p + Vector2(14, 0), p + Vector2(5, 0), c, 3.0)
+		reticle.draw_line(p + Vector2(0, -14), p + Vector2(0, -5), c, 3.0)
+		reticle.draw_line(p + Vector2(0, 14), p + Vector2(0, 5), c, 3.0)
+		if hm > 0.0:
+			_hit_x(p, Color(1, 1, 1, hm * 5.0))
+
+
+func _hit_x(p: Vector2, c: Color) -> void:
+	for d in [Vector2(1, 1), Vector2(1, -1), Vector2(-1, 1), Vector2(-1, -1)]:
+		reticle.draw_line(p + d * 10.0, p + d * 22.0, c, 4.0)
 
 
 ## Phones and tablets get on-screen controls (?touch in the web address forces them on).
@@ -319,7 +374,7 @@ func _update_debug() -> void:
 	for id in pads:
 		lines.append("Pad %d: %s" % [id, Input.get_joy_name(id)])
 	var held: PackedStringArray = []
-	for a in ["slash", "guard", "dash", "stance_cycle", "lock", "restart"]:
+	for a in ["aim", "fire", "roll", "crouch", "reload", "restart"]:
 		if Input.is_action_pressed(a):
 			held.append(a)
 	lines.append("Held: " + (", ".join(held) if held.size() > 0 else "-"))

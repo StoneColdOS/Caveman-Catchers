@@ -27,7 +27,21 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 8: giant sword mechs in Tokyo (current)
+## Prototype 9: humanoid mechs, Syphon Filter gunplay (current)
+
+- [x] Playtest of prototype 8. **Verdict:** swords too slow, stances confusing, hard to tell what hit, the camera fought you
+- [x] Humanoid mech bodies (forward knees, broad chest, visor helmet), still lanky, rifle in both hands
+- [x] Syphon Filter movement: camera behind, always facing forward, strafe and backpedal, jog vs quiet walk, crouch-walk, combat roll with dodge
+- [x] Hold-to-lock aiming with brackets that close in and turn red; full lock does double damage; firing loosens it
+- [x] Ammo and reload, tracers, muzzle flash, impact sparks, hit marker, enemy health bars, red damage flash
+- [x] Silent kill: full-lock shot on an unaware enemy
+- [x] Enemies hold range, strafe, laser-sight you before every burst, aim worse when you move
+- [x] Bullets damage buildings until they collapse; stray shots knock props over; rolling smashes low buildings
+- [ ] Play it on the Thor and phone: does it feel like Syphon Filter? Are the lasers enough warning?
+- [ ] Sound pass
+- [ ] Weapon pickups
+
+## Prototype 8: giant sword mechs in Tokyo (dropped)
 
 - [x] Renamed to Mech Mania
 - [x] Playtest of prototype 7. **Verdict:** punching felt mushy, stealth was slow, soldiers weren't a match, mech moved badly
