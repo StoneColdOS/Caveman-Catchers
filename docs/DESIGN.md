@@ -5,7 +5,7 @@
 
 ## The pitch
 
-Giant cyborg sword fights in a destructible PSX Tokyo. Move like Phantom Pain, fight like Metal Gear Rising, and everything is exaggerated like a Tarantino movie: oil gushes, sparks, slow motion, limbs flying, buildings coming down.
+Giant cyborg sword duels in a destructible Tokyo. The right stick is the sword, every enemy has a blade too, and you move like an anime ninja. Everything is exaggerated like a Tarantino movie: oil gushes, sparks, slow motion, limbs flying, buildings coming down.
 
 ## Inspirations
 
@@ -19,15 +19,19 @@ Giant cyborg sword fights in a destructible PSX Tokyo. Move like Phantom Pain, f
 ## Locked decisions
 
 - **Name:** Mech Mania
-- **Look:** heavy PSX on the world (vertex snapping, affine textures, 200-line dithered screen). The mechs get less jitter so moving bodies stay smooth. Night Tokyo, 3x3 blocks, neon, lit windows, hazy skyline
+- **Look (modernized Nov 10 for readability):** a retro flavor, but clean. The screen filter is now 540 lines with light dithering, vertex wobble and texture warp are dialed way down (and nearly off on the mechs), filmic tonemapping, glow on neon and blades, and a brighter night with lighter fog. Mech trim glows (red on enemies, orange on you) so you can track limbs in a fight
 - **Scale:** mechs about 10 m; shops reach the chest, towers loom over you
 - **Hero:** khaki-grey humanoid mech with rusty orange trim, red visor slit, antenna and a trailing head cable, katana
 - **Enemies:**
   - Gunners: crimson with gold trim, horned shoulders, rifle
   - Swordsmen: gunmetal with red trim, katana
   - Visors: cyan calm, amber suspicious, red fighting, blue flashing weakened, white flash about to strike
-- **Movement (Phantom Pain):** a light push walks (2.5 to 4 m/s), a full push jogs (9), holding SPRINT runs at 16 with a heavy lean, wider FOV and momentum. B: crouch when standing, roll when moving, dive when sprinting (launch at 24 m/s, slide to a stop, untouchable). The camera sits close over the right shoulder
-- **Sword:**
+- **Movement (anime ninja, Nov 10):** hold R1 to ninja run at 23 m/s, ducked and pitched forward with the arms and blade streaming straight back. A is a ninja leap (20 m/s up, about 6.5 m high) with a front flip when moving, and a ninja-run leap carries far, onto low roofs. B dashes when moving, crouches when standing, and dives when ninja running. A light push walks and a full push jogs.
+- **Old movement note (Phantom Pain):** a light push walks (2.5 to 4 m/s), a full push jogs (9), holding SPRINT runs at 16 with a heavy lean, wider FOV and momentum. B: crouch when standing, roll when moving, dive when sprinting (launch at 24 m/s, slide to a stop, untouchable). The camera sits close over the right shoulder
+- **Sword on the right stick (Nov 10):** sweeping the stick from one direction to another (more than about 57°) slashes along that path. A quick out-and-back flick cuts in the flicked direction, and pushing the stick out alone does nothing, so you can set up a sweep. A sweep of more than about 130° is a power cut (4 damage, breaks guards). A sweep can pass through the stick's center and still count. Power cuts on a weakened enemy sever along the swing line. X and Y stay as backup quick and heavy slashes. Blades landing together **clash** (both bounce, big sparks)
+- **Camera:** automatic, since the right stick is the sword. It frames the enemy you're fighting (the nearest one onto you, within 28 m) and otherwise swings in behind you. You square up to your opponent, so the left stick circles him. R3 recenters
+- **Enemies:** all swordsmen (the user wanted every enemy to fight with a blade). The gunner code remains but none spawn
+- **Sword details:**
   - Quick slash: 2 damage, a 3-hit combo along different lines
   - Heavy: 4 damage, breaks guard, longer windup
   - Guard: blocks slashes from the front and deflects bullets

@@ -11,8 +11,8 @@ render_mode diffuse_lambert, specular_disabled;
 uniform vec4 albedo : source_color = vec4(1.0);
 uniform sampler2D tex : source_color, filter_nearest_mipmap, repeat_enable;
 uniform float tex_scale = 1.4;
-uniform float snap_rows = 110.0;   // lower = more jitter
-uniform float affine = 1.0;        // 1 = full PS1 texture warp, 0 = correct
+uniform float snap_rows = 280.0;   // lower = more jitter (dialed back for readability)
+uniform float affine = 0.35;       // 1 = full PS1 texture warp, 0 = correct
 
 varying vec3 uv_w;   // (uv * w, w): interpolates into affine (non-perspective) uvs
 

@@ -48,6 +48,7 @@ var gait := 0.0                   # 0 = standing, ~0.5 = jog, 1 = full sprint (s
 var bank := 0.0
 var _last_yaw := 0.0
 var stumps: Array = []            # Node3D markers where oil gushes from
+var accent_color := Color.WHITE
 
 
 func build(is_enemy: bool, weapon_kind := "katana") -> void:
@@ -57,6 +58,7 @@ func build(is_enemy: bool, weapon_kind := "katana") -> void:
 	var frame := Color(0.15, 0.15, 0.16) if not enemy else Color(0.1, 0.08, 0.08)
 	var accent := Color(0.75, 0.3, 0.1) if not enemy else Color(0.85, 0.68, 0.25)
 	var eye_c := Color(1.0, 0.2, 0.12) if not enemy else Color(0.3, 0.9, 1.0)
+	accent_color = accent
 	if enemy and weapon == "katana":
 		hull = Color(0.36, 0.38, 0.46)          # sword mechs: gunmetal
 		accent = Color(0.85, 0.15, 0.15)        # with red trim
@@ -173,11 +175,20 @@ func build(is_enemy: bool, weapon_kind := "katana") -> void:
 	flash = Util.glow(Util.box(Vector3(0.22, 0.22, 0.3)), Color(1.0, 0.85, 0.4))
 	flash.visible = false
 	muzzle.add_child(flash)
-	# Less PS1 vertex jitter on the mechs themselves so moving bodies stay smooth
+	# Clean, readable mechs: almost no jitter, and the trim glows so you can track
+	# every limb in a fight (enemies red, you orange)
+	var trim := Color(1.0, 0.25, 0.2) if enemy else Color(1.0, 0.55, 0.15)
+	if enemy and weapon == "rifle":
+		trim = Color(1.0, 0.8, 0.3)
 	for mi in find_children("", "MeshInstance3D", true, false):
 		if mi.material_override is ShaderMaterial:
-			mi.material_override.set_shader_parameter("snap_rows", 320.0)
-			mi.material_override.set_shader_parameter("affine", 0.5)
+			var sm: ShaderMaterial = mi.material_override
+			sm.set_shader_parameter("snap_rows", 900.0)
+			sm.set_shader_parameter("affine", 0.1)
+			var c: Color = sm.get_shader_parameter("albedo")
+			if c.is_equal_approx(accent):
+				mi.material_override = Util.mat(trim * 1.6, true)
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
 # --- Dismemberment
@@ -368,7 +379,7 @@ func _katana_pose(m: Node) -> Array:
 	if m.in_blade_mode():
 		return [Vector3(0.25, 2.25, 0.35), Vector3(0.1, 0.8, 0.55)]   # raised, ready to cut
 	if m.is_sprinting() or m.dive_t > 0.0:
-		return [Vector3(0.45, 1.35, -0.1), Vector3(0.25, -0.25, -0.95)]  # trailing behind, ninja run
+		return [Vector3(0.42, 1.5, -0.7), Vector3(0.12, -0.55, -0.85)]   # streaming straight back, ninja run
 	# Idle / jog: low and to the side, edge forward
 	return [Vector3(0.38, 1.25 + sin(walk_phase) * 0.03 * gait, 0.3), Vector3(0.35, -0.45, 0.8)]
 
@@ -401,9 +412,10 @@ func animate(delta: float) -> void:
 	var diving: bool = m.dive_t > 0.0
 	var airborne: bool = not m.is_on_floor() and not m.dead
 	var grounded_move: bool = m.is_on_floor() and not m.dead and not rolling and not diving
-	var target_gait := clampf(hs / RUN_MODEL_SPEED, 0.0, 1.25) if grounded_move else 0.0
-	gait = move_toward(gait, target_gait, delta * 3.0)
-	var cadence := lerpf(1.0, 1.6, minf(gait, 1.2))
+	var ninja: bool = m.is_ninja_running() and grounded_move
+	var target_gait := clampf(hs / RUN_MODEL_SPEED, 0.0, 1.8) if grounded_move else 0.0
+	gait = move_toward(gait, target_gait, delta * 4.0)
+	var cadence := lerpf(1.0, 1.6, minf(gait, 1.0)) + maxf(0.0, gait - 1.0) * 1.0   # ninja legs blur
 	if hs > 0.05 and grounded_move:
 		walk_phase += TAU * cadence * delta
 	var amp := clampf(hs / (4.0 * cadence), 0.0, 1.0) if grounded_move else 0.0
@@ -427,7 +439,12 @@ func animate(delta: float) -> void:
 		body_y = -0.9
 		lean = 1.35            # flat out, Phantom Pain dive
 	elif airborne:
-		lean = -0.08
+		lean = 0.25
+	elif ninja:
+		# Anime ninja run: ducked low, torso almost flat, head up
+		body_y = -0.28 - absf(sin(walk_phase)) * 0.05
+		lean = 0.72
+		sway = bank * 1.4
 	else:
 		body_y = -absf(sin(walk_phase)) * lerpf(0.02, 0.08, minf(gait, 1.0)) * clampf(gait * 3.0, 0.0, 1.0)
 		lean = lerpf(0.04, 0.22, minf(gait, 1.0)) + maxf(0.0, gait - 1.0) * 0.6   # sprint leans hard
@@ -476,11 +493,18 @@ func animate(delta: float) -> void:
 			body_root.position = pivot - body_root.basis * pivot + Vector3(0, -0.9 * sin(u * PI), 0)
 		else:
 			var b := Basis.from_euler(Vector3(lerp_angle(body_root.rotation.x, lean, k), lerp_angle(body_root.rotation.y, twist, kt), lerp_angle(body_root.rotation.z, sway, k)))
-			body_root.basis = b
-			body_root.position.x = lerp(body_root.position.x, 0.0, k)
-			body_root.position.z = lerp(body_root.position.z, (0.6 if m.dead else (0.9 if diving else 0.0)), k)
+			if m.flip > 0.0 and airborne:
+				# Front flip around the waist mid-leap
+				var fb := Basis(Vector3.RIGHT, ease(m.flip, 0.6) * TAU)
+				var piv := Vector3(0, 1.5, 0)
+				body_root.basis = fb * Basis.from_euler(Vector3(0.6, 0, 0))
+				body_root.position = piv - fb * piv + Vector3(0, 0.3, 0)
+			else:
+				body_root.basis = b
+				body_root.position.x = lerp(body_root.position.x, 0.0, k)
+				body_root.position.z = lerp(body_root.position.z, (0.6 if m.dead else (0.9 if diving else (0.35 if ninja else 0.0))), k)
 
-		var head_target := Vector3(-lean * 0.6, -twist * 0.4, -sway * 0.5)
+		var head_target := Vector3(-lean * (0.85 if ninja else 0.6), -twist * 0.4, -sway * 0.5)
 		if weapon == "rifle" and m.is_aiming():
 			head_target.x = clampf(-asin(clampf(aim_body.y, -1.0, 1.0)), -0.5, 0.5)
 		head_vel += (head_target - head_rot) * 60.0 * delta
@@ -507,8 +531,12 @@ func animate(delta: float) -> void:
 			lift_now = maxf(0.0, cos(ph)) * lerpf(0.1, 0.4, minf(gait, 1.2))
 			foot.y += lift_now
 			foot -= mdir * lift_now * 0.35 * minf(gait, 1.0)
+		if ninja and amp > 0.0:
+			foot.y = lift_now * 0.6                # low skimming strides
 		if airborne:
 			foot = Vector3(0.2 * side, 0.5, 0.15 if i == 0 else -0.1)
+			if m.flip > 0.0:
+				foot = body_root.transform * Vector3(0.2 * side, 0.55, 0.35)   # knees tucked into the flip
 		if diving:
 			foot = Vector3(0.2 * side, 0.3, -1.2)
 		if rolling:
@@ -536,7 +564,7 @@ func animate(delta: float) -> void:
 	_pose_weapon(clampf(14.0 * delta, 0.0, 1.0), (body_root.basis.inverse() * aim_body).normalized())
 	hands[1].position = grip
 	var fore := grip + gun_dir * (0.45 if weapon == "rifle" else -0.2)   # rifle foregrip / two-hand katana
-	var two_handed: bool = weapon == "rifle" or m.guarding or m.in_blade_mode() or (m.swing != 0 and m.swing_kind == "heavy")
+	var two_handed: bool = weapon == "rifle" or m.guarding or m.in_blade_mode() or (m.swing != 0 and m.swing_kind in ["heavy", "big"])
 	if weapon == "rifle" and m.reload_t > 0.0 and fmod(t, 0.5) < 0.25:
 		fore = grip + gun_dir * 0.2 + Vector3(0, -0.2, 0)
 	if not two_handed or lost.has("arm_r") or (weapon == "rifle" and gait > 0.3 and not m.is_aiming() and m.reload_t <= 0.0):
@@ -546,6 +574,8 @@ func animate(delta: float) -> void:
 			fore = Vector3(-0.75, 1.75, -0.2)
 		if m.has_method("is_bashing") and m.is_bashing():
 			fore = Vector3(-0.2, 1.9, 0.9)
+	if m.is_ninja_running() and not airborne:
+		fore = Vector3(-0.38, 1.6, -0.85)         # free arm straight back too
 	if airborne or diving:
 		fore = Vector3(-0.6, 1.8, 0.6)
 	hands[0].position = hands[0].position.lerp(fore, clampf((30.0 if m.swing == 2 else 12.0) * delta, 0.0, 1.0))

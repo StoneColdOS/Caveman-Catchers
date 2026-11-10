@@ -27,7 +27,19 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Tranq felt overpowered once spotting was harmless. **Removed the tranq gun**: net only, pure Ape Escape. Triggers now double up crouch (L2) and net (R2)
 
 
-## Prototype 12: katana, Blade Mode, Phantom Pain movement (current)
+## Prototype 13: stick sword, sword enemies, ninja movement, modern look (current)
+
+- [x] The right stick IS the sword: sweep between directions to slash along that path, flick out and back to cut, a big sweep for a power cut
+- [x] Blades landing together clash
+- [x] Every enemy is a swordsman
+- [x] Automatic camera that frames your opponent; you square up and circle him
+- [x] Ninja run (R1): ducked, pitched forward, blade streaming back. Ninja leap with a flip (A) that reaches rooftops
+- [x] Modern visual pass: much lighter screen filter, less wobble, brighter night, glow, glowing mech trim
+- [x] Touch: swipe on the right side to slash; JUMP, GUARD, DODGE, BLADE, NINJA buttons
+- [ ] Play it on the Thor: do stick swipes feel natural? Is the auto camera good in fights?
+- [ ] Sound pass
+
+## Prototype 12: katana, Blade Mode, Phantom Pain movement
 
 - [x] Guns dropped. A katana with a quick 3-hit combo, a heavy that breaks guards, guard, parry, and bullet deflection
 - [x] Blade Mode (hold L2): time slows, a cut line on the enemy (right stick angle, left stick slide), flick to cut; severs whatever the line crosses

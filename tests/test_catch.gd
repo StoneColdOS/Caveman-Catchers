@@ -24,7 +24,7 @@ func _run() -> void:
 	for e in es:
 		e.frozen = true
 		kinds[e.kind] = kinds.get(e.kind, 0) + 1
-	_check(es.size() == 4 and kinds.get("gunner", 0) == 2 and kinds.get("swordsman", 0) == 2, "2 gunners and 2 swordsmen spawned")
+	_check(es.size() == 4 and kinds.get("swordsman", 0) == 4, "4 sword mechs spawned (everyone has a blade)")
 	_check(player.weapon == "katana" and player.rig.weapon == "katana", "You carry a katana")
 
 	# --- 1. Phantom Pain movement: walk, jog, sprint, smooth ramp.
@@ -45,13 +45,14 @@ func _run() -> void:
 	var early := _hspeed(player)
 	await _frames(60)
 	var sprint := _hspeed(player)
-	_check(early < 12.0 and sprint > 14.0, "Hold SPRINT: ramps up to a full sprint (%.1f m/s)" % sprint)
+	_check(early < 14.0 and sprint > 20.0, "Hold R1: ninja run (%.1f m/s)" % sprint)
+	_check(player.is_ninja_running() and player.rig.body_root.rotation.x > 0.6, "Ninja run: ducked low, torso flat forward")
 	# Dive out of a sprint
 	var p0: Vector3 = player.global_position
 	Input.action_press("roll")
 	await _frames(2)
 	Input.action_release("roll")
-	_check(player.dive_t > 0.0, "B at a sprint: dive")
+	_check(player.dive_t > 0.0, "B while ninja running: dive")
 	await _frames(55)
 	_check(player.global_position.distance_to(p0) > 8.0 and player.dive_t <= 0.0, "Dive launches you forward and you slide to a stop")
 	Input.action_release("sprint")
@@ -66,6 +67,26 @@ func _run() -> void:
 	Input.action_release("roll")
 	player.crouching = false
 	await _frames(5)
+
+	# Ninja leap
+	player.global_position = Vector3(-72, 0.2, 30)
+	await _frames(20)
+	Input.action_press("move_forward", 1.0)
+	await _frames(10)
+	Input.action_press("jump")
+	await _frames(2)
+	Input.action_release("jump")
+	var peak := 0.0
+	var flipped := false
+	for i in 90:
+		await physics_frame
+		peak = maxf(peak, player.global_position.y)
+		if player.flip > 0.3:
+			flipped = true
+	Input.action_release("move_forward")
+	_check(peak > 5.0, "A: big ninja leap (%.1f m)" % peak)
+	_check(flipped, "...with a front flip when you're moving")
+	await _frames(30)
 
 	# --- 2. Quick slash combo on a swordsman.
 	var sw = _first(es, "swordsman")
@@ -84,6 +105,56 @@ func _run() -> void:
 	_check(city._puddles.size() > 0 or true, "")
 	await _frames(40)
 	_check(city._puddles.size() > 0, "Oil splashes onto the street (%d puddles)" % city._puddles.size())
+
+	# --- 2b. The right stick IS the sword.
+	_reset(sw)
+	_face_off(player, sw, 7.0)
+	player.stagger = 0.0
+	await _frames(30)
+	var hp_s: int = sw.hp
+	Input.action_press("look_right", 1.0)      # stick out to the right
+	await _frames(4)
+	Input.action_release("look_right")
+	Input.action_press("look_up", 1.0)         # ...then sweep up: a slash along that path
+	await _frames(2)
+	_check(player.swing != 0 and player.swing_kind == "swipe", "Sweep the stick right -> up: he slashes")
+	await _swing_done(player)
+	Input.action_release("look_up")
+	_check(sw.hp < hp_s, "The swipe lands")
+	await _frames(30)
+	sw.stagger = 0.0
+	Input.action_press("look_left", 1.0)       # stick out left: no slash yet, just the start
+	await _frames(4)
+	_check(player.swing == 0, "Pushing the stick out to start a sweep doesn't slash")
+	Input.action_release("look_left")
+	await _frames(2)                            # (passing through the middle)
+	Input.action_press("look_right", 1.0)      # all the way across: power cut
+	await _frames(2)
+	_check(player.swing_kind == "big", "Sweep all the way across: power cut")
+	await _swing_done(player)
+	Input.action_release("look_right")
+	await _frames(30)
+	sw.guarding = true
+	sw.stagger = 0.0
+	player.stagger = 0.0
+	Input.action_press("look_down", 1.0)
+	await _frames(4)
+	Input.action_release("look_down")
+	Input.action_press("look_up", 1.0)
+	await _swing_done(player)
+	Input.action_release("look_up")
+	_check(not sw.guarding and sw.stagger > 0.5, "A power cut breaks his guard")
+	await _frames(40)
+	# Clash: both blades land together
+	_reset(sw)
+	sw.swing = 2
+	var cr: String = sw.receive_slash(player, "swipe", 0.0)
+	_check(cr == "clash" and sw.hp == sw.MAX_HP, "Blades landing together CLASH")
+	await _frames(40)
+	# The camera frames whoever you're fighting
+	sw.state = sw.State.COMBAT
+	await _frames(5)
+	_check(player.combat_target == sw, "Camera locks onto the mech you're fighting")
 
 	# --- 3. Guard: blocks quick slashes, heavy smashes through.
 	_reset(sw)
@@ -129,7 +200,8 @@ func _run() -> void:
 	player.hp = player.MAX_HP
 
 	# --- 6. Guard deflects bullets; without it they hurt.
-	var gn = _first(es, "gunner")
+	var gn = _spawn(main, "gunner", Vector3(-72, 0.2, -20))
+	await _frames(3)
 	_reset(gn)
 	gn.global_position = Vector3(-72, 0.2, -20)
 	player.global_position = Vector3(-72, 0.2, 10)
@@ -203,7 +275,8 @@ func _run() -> void:
 	await _frames(5)
 
 	# --- 9. Sneak attack: slash an unaware mech from behind and he's exposed.
-	var g2 = _second(es, "gunner")
+	var g2 = _spawn(main, "gunner", Vector3(24, 0.2, 60))
+	await _frames(3)
 	_reset(g2)
 	g2.state = g2.State.PATROL
 	g2.global_position = Vector3(24, 0.2, 60)
@@ -259,7 +332,7 @@ func _run() -> void:
 	t._touch_move(0, Vector2(100 + t.STICK_RADIUS, 600))
 	_check(Input.get_action_strength("move_right") > 0.9, "Touch joystick: full push")
 	t._touch_up(0)
-	for name in ["slash", "heavy", "guard", "dodge"]:
+	for name in ["guard", "dodge", "jump"]:
 		t._touch_down(1, t.buttons[name].pos)
 		var ok := Input.is_action_pressed(t.buttons[name].action)
 		t._touch_up(1)
@@ -274,6 +347,17 @@ func _run() -> void:
 	Engine.time_scale = 1.0
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)
+
+
+func _spawn(main, kind: String, at: Vector3) -> Node:
+	var e := CharacterBody3D.new()
+	e.set_script(load("res://scripts/enemy.gd"))
+	e.kind = kind
+	e.position = at
+	main.add_child(e)
+	e.city = main.city
+	e.frozen = true
+	return e
 
 
 func _first(es: Array, kind: String) -> Node:

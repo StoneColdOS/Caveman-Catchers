@@ -1,27 +1,33 @@
 extends "res://scripts/fighter.gd"
-## Your mech: a 10 m cyborg swordsman. Moves like Phantom Pain, fights like Rising.
+## Your mech: a 10 m cyborg swordsman. Moves like an anime ninja, fights with the stick.
 ##
-## MOVE    Light push walks, full push jogs. Hold SPRINT to run flat out, leaning hard.
-##         B: crouch (standing), dodge roll (moving), dive (sprinting: launch flat out
-##         and slide). Close over-the-shoulder camera on the right stick.
-## FIGHT   X / R2: quick slashes, chain three for a combo.  Y: heavy slash, breaks guards.
-##         L1: guard (blocks slashes, deflects bullets). Raise it just as a blade
-##         lands to PARRY: the attacker reels, wide open.
-## BLADE   Hold L2: time nearly stops, the camera tightens, and a cut line appears
-## MODE    across the nearest enemy. Right stick tilts the line, left stick slides it.
-##         Flick the right stick (or press X) to cut: everything the line crosses
-##         comes off. Heads and torsos only give once he's weakened or parried.
-##         Runs on blade energy: earn it by landing hits and parries.
+## SWORD   The right stick IS the katana. Sweep it from one direction to another and
+##         he slashes along that path; flick it straight out and he cuts that way.
+##         A big sweep through the middle is a power cut that breaks guards.
+##         (X and Y still do a quick slash / heavy slash.)
+##         L1: guard. Raise it just as his blade lands to PARRY: he reels, wide open.
+##         Blades that land together clash.
+## MOVE    Hold R1: ninja run, ducked low, arms and blade streaming behind.
+##         A: big ninja leap (flips when you're moving; lands on rooftops).
+##         B: dash (moving, untouchable) / crouch (standing) / dive (ninja running).
+##         The camera follows on its own and frames the enemy you're fighting.
+## BLADE   Hold L2: time nearly stops. Swipe the stick and the cut goes along your
+## MODE    swipe through him (left stick slides the line). Whatever it crosses comes
+##         off. Heads and torsos only give once he's weakened or parried.
 ##         A finishing cut through head or torso repairs your armor.
 
 const WALK_SPEED := 4.0
 const JOG_SPEED := 9.0
-const SPRINT_SPEED := 16.0
+const SPRINT_SPEED := 23.0         # ninja run
+const JUMP_SPEED := 20.0
+const NINJA_JUMP_FORWARD := 26.0
 const CROUCH_SPEED := 3.0
 const ACCEL := 26.0
 const DECEL := 34.0
-const TURN_SPEED := 9.0
-const LOOK_SPEED := 2.5
+const TURN_SPEED := 11.0
+const FOLLOW_SPEED := 3.0
+const COMBAT_RANGE := 28.0
+const SWIPE_ANGLE := 1.0          # how far the stick has to travel between directions (radians)
 const DIVE_TIME := 0.85
 const DIVE_SPEED := 24.0
 const MAX_HP := 30
@@ -62,6 +68,17 @@ var cut_cd := 0.0
 var cuts_made := 0
 var touch_cut_angle := 0.0
 var touch_cutting := false
+var combat_target: Node = null
+# Stick-swipe tracking
+var _anchor := Vector2.ZERO
+var _anchor_valid := false
+var _neutral_t := 0.0
+var _anchor_age := 0.0
+var _anchor_used := false
+var queued_swipe := Vector2.ZERO  # buffered swipe direction (screen space)
+var queued_big := false
+var air_time := 0.0
+var was_on_floor := true
 
 
 func _ready() -> void:
@@ -75,11 +92,11 @@ func _ready() -> void:
 
 func _build_camera() -> void:
 	camera_pivot = Node3D.new()
-	camera_pivot.position.y = 10.6
+	camera_pivot.position.y = 11.0
 	add_child(camera_pivot)
 	arm = SpringArm3D.new()
-	arm.spring_length = 12.0
-	arm.position = Vector3(5.0, 0.4, 0)        # over the right shoulder, right in the action
+	arm.spring_length = 14.0
+	arm.position = Vector3(4.0, 0.6, 0)        # over the right shoulder
 	arm.collision_mask = Util.LAYER_WORLD
 	arm.margin = 0.5
 	arm.add_excluded_object(get_rid())
@@ -91,8 +108,8 @@ func _build_camera() -> void:
 	camera.make_current()
 	var fill := OmniLight3D.new()
 	fill.light_color = Color(0.6, 0.7, 1.0)
-	fill.light_energy = 1.4
-	fill.omni_range = 25.0
+	fill.light_energy = 2.2
+	fill.omni_range = 35.0
 	fill.omni_attenuation = 1.0
 	fill.light_specular = 0.0
 	camera.add_child(fill)
@@ -103,11 +120,15 @@ func opponents() -> Array:
 
 
 func is_running() -> bool:
-	return move_mode.begins_with("Jogging") or move_mode.begins_with("Sprinting")
+	return move_mode.begins_with("Jogging") or move_mode.begins_with("Ninja")
 
 
 func is_sprinting() -> bool:
-	return sprinting and move_mode.begins_with("Sprinting")
+	return sprinting and move_mode.begins_with("Ninja")
+
+
+func is_ninja_running() -> bool:
+	return is_sprinting()
 
 
 func in_blade_mode() -> bool:
@@ -130,20 +151,25 @@ func _physics_process(delta: float) -> void:
 	else:
 		_combat_input(rdelta, input, look)
 
-	# --- Camera: close over the shoulder; wider and pulled back at a sprint
-	if not blade_on:
-		yaw -= look.x * LOOK_SPEED * rdelta
-		pitch = clamp(pitch - look.y * LOOK_SPEED * rdelta, -0.9, 0.4)
-	elif is_instance_valid(blade_target):
-		var to: Vector3 = blade_target.global_position - global_position
-		yaw = lerp_angle(yaw, atan2(-to.x, -to.z), clampf(8.0 * rdelta, 0.0, 1.0))
-		pitch = lerp(pitch, -0.05, clampf(6.0 * rdelta, 0.0, 1.0))
+	# --- Camera: automatic (the right stick is your sword). Frames the enemy you're
+	# fighting; otherwise swings in behind you as you move.
+	_update_combat_target()
+	var focus: Node = blade_target if blade_on and is_instance_valid(blade_target) else combat_target
+	if Input.is_action_just_pressed("recenter"):
+		yaw = rig.rotation.y + PI
+	if focus and not is_sprinting():
+		var to: Vector3 = focus.global_position - global_position
+		yaw = lerp_angle(yaw, atan2(-to.x, -to.z) + 0.5, clampf(5.0 * rdelta, 0.0, 1.0))
+		pitch = lerp(pitch, -0.2, clampf(3.0 * rdelta, 0.0, 1.0))
+	elif input.length() > 0.2 or is_sprinting():
+		yaw = lerp_angle(yaw, rig.rotation.y + PI, clampf(FOLLOW_SPEED * rdelta, 0.0, 1.0))
+		pitch = lerp(pitch, -0.16, clampf(2.0 * rdelta, 0.0, 1.0))
 	camera_pivot.rotation = Vector3(pitch, yaw, 0)
 	var kc := clampf(6.0 * rdelta, 0.0, 1.0)
 	var sprint_view := is_sprinting()
-	arm.spring_length = lerp(arm.spring_length, 9.0 if blade_on else (15.0 if sprint_view else 12.0), kc)
-	arm.position.x = lerp(arm.position.x, 5.5 if blade_on else 5.0, kc)
-	camera.fov = lerp(camera.fov, 55.0 if blade_on else (78.0 if sprint_view else 68.0), kc)
+	arm.spring_length = lerp(arm.spring_length, 10.0 if blade_on else (17.0 if sprint_view else 14.0), kc)
+	arm.position.x = lerp(arm.position.x, 5.0 if blade_on else (2.0 if sprint_view else 4.0), kc)
+	camera.fov = lerp(camera.fov, 55.0 if blade_on else (88.0 if sprint_view else 68.0), kc)
 	shake = maxf(0.0, shake - rdelta * 2.5)
 	camera.h_offset = randf_range(-1, 1) * shake * 0.5
 	camera.v_offset = randf_range(-1, 1) * shake * 0.5
@@ -157,7 +183,7 @@ func _physics_process(delta: float) -> void:
 		dir = (Basis(Vector3.UP, yaw) * Vector3(input.x, 0, input.y)).normalized()
 	var want_v := Vector3.ZERO
 	var noise := 0.0
-	sprinting = Input.is_action_pressed("sprint") and not crouching and legs_lost() == 0
+	sprinting = Input.is_action_pressed("sprint") and not crouching and legs_lost() == 0 and not guarding
 	if dead:
 		move_mode = "WRECKED"
 	elif blade_on:
@@ -184,7 +210,7 @@ func _physics_process(delta: float) -> void:
 		elif sprinting:
 			speed = SPRINT_SPEED
 			noise = SPRINT_NOISE
-			move_mode = "Sprinting"
+			move_mode = "Ninja running"
 		elif tilt < 0.6 or Input.is_action_pressed("walk"):
 			speed = lerpf(2.5, WALK_SPEED, clampf(tilt / 0.6, 0.0, 1.0))
 			noise = WALK_NOISE
@@ -202,8 +228,8 @@ func _physics_process(delta: float) -> void:
 	var accel := ACCEL if speeding_up else DECEL
 	if roll_t > 0.0 or dive_t > 0.0 or blade_on:
 		accel = 200.0
-	if is_sprinting():
-		accel *= 0.7    # heavy momentum at full tilt
+	if not is_on_floor():
+		accel *= 0.35   # committed to the leap
 	velocity.x = move_toward(velocity.x, want_v.x, accel * rdelta)
 	velocity.z = move_toward(velocity.z, want_v.z, accel * rdelta)
 	if is_on_floor() and velocity.y <= 0.0:
@@ -212,6 +238,20 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= GRAVITY * rdelta
 	var pre := velocity
 	move_and_slide()
+	var on_floor := is_on_floor()
+	if not on_floor:
+		air_time += rdelta
+		if flip > 0.0:
+			flip = minf(1.0, flip + rdelta / 0.75)
+	elif not was_on_floor:
+		if air_time > 0.3:
+			add_shake(0.5)
+			get_tree().call_group("enemies", "hear_noise", global_position, 40.0, self)
+			if city:
+				city.push_props(global_position, 5.0, Vector3.UP * 6.0)
+		air_time = 0.0
+		flip = 0.0
+	was_on_floor = on_floor
 
 	if city and not dead:
 		for i in get_slide_collision_count():
@@ -220,11 +260,13 @@ func _physics_process(delta: float) -> void:
 				city.smash(col, global_position, Vector2(pre.x, pre.z).length())
 		city.push_props(global_position, 1.8, pre)
 
-	# --- Facing: where you move; snap to the enemy when you cut
+	# --- Facing: square up to the enemy you're fighting; otherwise face where you go
 	if not dead and not blade_on and swing == 0 and dive_t <= 0.0 and roll_t <= 0.0:
 		var face_to := dir
-		if guarding:
-			face_to = Basis(Vector3.UP, yaw) * Vector3.FORWARD
+		if combat_target and not is_sprinting():
+			face_to = combat_target.global_position - global_position
+		elif guarding:
+			face_to = Vector3.ZERO   # hold your facing behind the guard
 		if face_to.length() > 0.1:
 			var turn := TURN_SPEED * (0.55 if is_sprinting() else 1.0)
 			rig.rotation.y = lerp_angle(rig.rotation.y, atan2(face_to.x, face_to.z), clampf(turn * rdelta, 0.0, 1.0))
@@ -261,7 +303,18 @@ func _combat_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 		_blade_mode_input(rdelta, input, look)
 		return
 
-	# B: crouch / roll / dive
+	# A: ninja leap (flips when moving; a ninja-run leap goes a long way)
+	if Input.is_action_just_pressed("jump") and is_on_floor() and roll_t <= 0.0 and dive_t <= 0.0 and swing != 2 and legs_lost() == 0:
+		velocity.y = JUMP_SPEED
+		crouching = false
+		if input.length() > 0.2:
+			flip = 0.01
+			if is_sprinting():
+				velocity.x += facing().x * (NINJA_JUMP_FORWARD - SPRINT_SPEED)
+				velocity.z += facing().z * (NINJA_JUMP_FORWARD - SPRINT_SPEED)
+		add_shake(0.2)
+
+	# B: crouch / dash / dive
 	if Input.is_action_just_pressed("roll"):
 		if is_sprinting() and input.length() > 0.2:
 			dive_t = DIVE_TIME
@@ -274,7 +327,18 @@ func _combat_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 		else:
 			crouching = not crouching
 
-	# Attacks (buffered so combos chain smoothly)
+	# The right stick swings the sword
+	_detect_swipe(rdelta, look)
+	if queued_swipe != Vector2.ZERO and (swing == 0 or swing == 3) and stagger <= 0.0 and roll_t <= 0.0 and dive_t <= 0.0:
+		swing = 0
+		_face_nearest()
+		crouching = false
+		var sa := atan2(queued_swipe.y, queued_swipe.x)
+		start_swing("big" if queued_big else "swipe", PI - sa)   # screen right = the mech's -X
+		last_swipe_screen = sa
+		queued_swipe = Vector2.ZERO
+
+	# Buttons still work too (buffered so combos chain smoothly)
 	if Input.is_action_just_pressed("attack"):
 		queued_attack = "light"
 	if Input.is_action_just_pressed("heavy"):
@@ -295,12 +359,81 @@ func _combat_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 		queued_attack = ""
 
 
+## Sweeping the stick from one direction to another = a slash along that path.
+## Flicking it straight out from the middle = a cut toward that direction.
+## Swipe directions are in screen space (x right, y up).
+var last_swipe_screen := 0.0
+
+
+func _detect_swipe(rdelta: float, look: Vector2) -> void:
+	var s2 := Vector2(look.x, -look.y)     # stick up = screen up
+	var mag := s2.length()
+	if mag > 0.65:
+		_neutral_t = 0.0
+		if _anchor_valid:
+			_anchor_age += rdelta
+			var turn := absf(wrapf(s2.angle() - _anchor.angle(), -PI, PI))
+			if turn > SWIPE_ANGLE:
+				_queue_swipe(s2.normalized() - _anchor.normalized(), turn > 2.3)
+				_anchor = s2
+				_anchor_age = 0.0
+				_anchor_used = true
+		else:
+			# Stick pushed out: remember where the sweep starts (no slash yet)
+			_anchor = s2
+			_anchor_valid = true
+			_anchor_age = 0.0
+			_anchor_used = false
+	elif mag < 0.3 and _anchor_valid:
+		# Passing through the middle mid-sweep is fine: keep the start point briefly
+		_neutral_t += rdelta
+		if _neutral_t > 0.12:
+			if not _anchor_used and _anchor_age < 0.3:
+				_queue_swipe(_anchor.normalized(), false)   # quick out-and-back flick: cut that way
+			_anchor_valid = false
+
+
+func _queue_swipe(dir: Vector2, big: bool) -> void:
+	if dir.length() < 0.1:
+		return
+	if blade_on:
+		blade_cut(dir.angle())
+		return
+	queued_swipe = dir.normalized()
+	queued_big = big
+
+
+## Touch: a swipe on the right side of the screen.
+func touch_swipe(dir_screen: Vector2) -> void:
+	if blade_on:
+		touch_cut(dir_screen.angle())
+	else:
+		_queue_swipe(dir_screen, dir_screen.length() > 2.0)
+
+
 ## Snap to face the nearest enemy in front before a swing (soft targeting).
 func _face_nearest() -> void:
 	var t := _nearest_enemy(14.0, -0.2)
 	if t:
 		var to: Vector3 = t.global_position - global_position
 		rig.rotation.y = atan2(to.x, to.z)
+
+
+## The enemy you're fighting: the nearest one who's onto you (or very close).
+func _update_combat_target() -> void:
+	if combat_target and (not is_instance_valid(combat_target) or combat_target.dead or global_position.distance_to(combat_target.global_position) > COMBAT_RANGE + 8.0):
+		combat_target = null
+	var best: Node = null
+	var best_d := COMBAT_RANGE
+	for e in opponents():
+		if e.dead:
+			continue
+		var d := global_position.distance_to(e.global_position)
+		if d < best_d and (e.is_fighting() or d < 14.0):
+			best = e
+			best_d = d
+	if best and (combat_target == null or best_d < global_position.distance_to(combat_target.global_position) - 6.0):
+		combat_target = best
 
 
 func _nearest_enemy(reach: float, cone: float) -> Node:
@@ -353,19 +486,10 @@ func _blade_mode_input(rdelta: float, input: Vector2, look: Vector2) -> void:
 	cut_offset = cut_offset.limit_length(4.5)
 	var mag := look.length()
 	if mag > 0.5:
-		cut_angle = atan2(-look.y, look.x)
+		cut_angle = atan2(-look.y, look.x)   # the line previews where the stick points
 	if touch_cutting:
 		cut_angle = touch_cut_angle
-	# A flick: stick slammed out then let go quickly
-	if mag > 0.85:
-		_flick_peak = mag
-		_flick_t = 0.0
-		_flick_angle = cut_angle
-	else:
-		_flick_t += rdelta
-		if _flick_peak > 0.85 and mag < 0.35 and _flick_t < 0.2:
-			_flick_peak = 0.0
-			blade_cut(_flick_angle)
+	_detect_swipe(rdelta, look)
 	if Input.is_action_just_pressed("attack"):
 		blade_cut(cut_angle)
 
@@ -448,10 +572,19 @@ func die(by: Node) -> void:
 ## Our hits feed blade energy.
 func note_hit(kind: String) -> void:
 	hit_marker = 0.2
-	energy = minf(MAX_ENERGY, energy + (12.0 if kind == "heavy" else 8.0))
+	energy = minf(MAX_ENERGY, energy + (12.0 if kind in ["heavy", "big"] else 8.0))
 
 
 func _resolve_slash() -> void:
 	super._resolve_slash()
+	# A big sweep through a weakened mech goes right through along the swing line
+	if swing_kind == "big" and (last_result == "hit" or last_result == "break"):
+		var t := _nearest_enemy(REACH, 0.2)
+		if t and not t.dead and t.weakened():
+			var right := camera.global_basis.x
+			right.y = 0.0
+			var cuts: Array = t.apply_cut(self, Vector2.ZERO, Vector2(cos(last_swipe_screen), sin(last_swipe_screen)), [right.normalized(), Vector3.UP])
+			if not cuts.is_empty() and cuts[0] != "armor":
+				last_result = "cut"
 	if last_result == "hit" or last_result == "kill" or last_result == "break":
 		note_hit(swing_kind)

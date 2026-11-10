@@ -2,16 +2,17 @@ extends RefCounted
 ## Sets up controls in code so they work on keyboard and on the Thor's gamepad.
 ## Phantom Pain movement, Rising-style sword.
 ##
-##   Move          left stick  / WASD   (light push walks, full push jogs)
-##   Sprint        A (hold)    / Shift
-##   Camera        right stick / arrow keys
-##   Quick slash   X or R2     / J      (tap 3x for a combo)
-##   Heavy slash   Y           / K      (breaks guards)
-##   Guard / parry L1          / L      (hold; raise it as a blade lands to parry)
-##   Blade Mode    L2 (hold)   / F      (time slows: right stick tilts the cut line,
-##                                       left stick slides it, flick or X to cut)
-##   Crouch / roll / dive  B   / C      (standing / moving / sprinting)
-##   Walk          L3 (hold)   / Ctrl
+##   Move          left stick  / WASD
+##   SWORD         right stick / arrow keys  (sweep from one direction to another = slash
+##                                            along that path; flick out = cut that way;
+##                                            a big sweep through the middle = power cut)
+##   Quick / heavy X / Y       / J / K      (button backups)
+##   Guard / parry L1          / L
+##   Blade Mode    L2 (hold)   / F          (time slows; swipes cut along their own line)
+##   Ninja run     R1 (hold)   / Shift
+##   Jump          A           / Space      (ninja leap, flips when moving)
+##   Dash / crouch / dive  B   / C
+##   Recenter cam  R3          / Tab
 ##   Restart       Start       / Enter
 
 
@@ -29,7 +30,6 @@ static func setup() -> void:
 	_action("attack")
 	_key("attack", KEY_J)
 	_button("attack", JOY_BUTTON_X)
-	_axis("attack", JOY_AXIS_TRIGGER_RIGHT, 1.0)
 
 	_action("heavy")
 	_key("heavy", KEY_K)
@@ -45,7 +45,15 @@ static func setup() -> void:
 
 	_action("sprint")
 	_key("sprint", KEY_SHIFT)
-	_button("sprint", JOY_BUTTON_A)
+	_button("sprint", JOY_BUTTON_RIGHT_SHOULDER)
+
+	_action("jump")
+	_key("jump", KEY_SPACE)
+	_button("jump", JOY_BUTTON_A)
+
+	_action("recenter")
+	_key("recenter", KEY_TAB)
+	_button("recenter", JOY_BUTTON_RIGHT_STICK)
 
 	_action("roll")
 	_key("roll", KEY_C)

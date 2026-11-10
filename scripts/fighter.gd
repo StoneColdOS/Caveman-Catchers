@@ -28,8 +28,8 @@ const CROUCH_CENTER := 4.2
 const PART_RADIUS := {"head": 1.0, "arm": 1.1, "leg": 1.4, "body": 99.0}
 
 # Sword timing: [windup, strike, recover] in seconds
-const SWING_TIMES := {"light": [0.1, 0.11, 0.2], "heavy": [0.34, 0.15, 0.38]}
-const SWING_DAMAGE := {"light": 2, "heavy": 4}
+const SWING_TIMES := {"light": [0.1, 0.11, 0.2], "heavy": [0.34, 0.15, 0.38], "swipe": [0.03, 0.1, 0.16], "big": [0.05, 0.12, 0.26]}
+const SWING_DAMAGE := {"light": 2, "heavy": 4, "swipe": 2, "big": 4}
 const REACH := 10.5
 const PARRY_WINDOW := 0.25
 const STAGGER_T := 0.45
@@ -56,6 +56,7 @@ var weapon := "katana"
 var rig: Node3D
 var city: Node
 var lost := {}                    # part -> true once cut off
+var flip := 0.0                   # mid-air front flip progress (0 = none)
 var _flash_t := 0.0
 
 var windup_mult := 1.0            # enemies wind up slower (readable tells)
@@ -122,6 +123,10 @@ func is_sprinting() -> bool:
 
 
 func in_blade_mode() -> bool:
+	return false
+
+
+func is_ninja_running() -> bool:
 	return false
 
 
@@ -257,6 +262,16 @@ func receive_slash(attacker: Node, kind: String, angle: float) -> String:
 	to_att = to_att.normalized()
 	var front := facing().dot(to_att) > 0.3
 	var hit_at := center() + to_att * 1.5
+	# Both blades landing at once: CLASH. Both bounce off in a shower of sparks.
+	if swing == 2 and front:
+		swing = 0
+		stagger = 0.35
+		attacker.recoil()
+		_knock(-to_att, 7.0)
+		if city:
+			city.sparks(hit_at, 34, Color(1, 0.95, 0.65))
+		_hitstop(0.12)
+		return "clash"
 	if guarding and front:
 		if guard_t < PARRY_WINDOW:
 			attacker.parried(self)
@@ -264,7 +279,7 @@ func receive_slash(attacker: Node, kind: String, angle: float) -> String:
 				city.sparks(hit_at, 30, Color(1, 0.95, 0.6))
 			_hitstop(0.14)
 			return "parry"
-		if kind == "heavy":
+		if kind == "heavy" or kind == "big":
 			guarding = false
 			stagger = 0.9
 			_knock(-to_att, 10.0)
@@ -282,14 +297,15 @@ func receive_slash(attacker: Node, kind: String, angle: float) -> String:
 	hp -= dmg
 	swing = 0
 	guarding = false
-	stagger = STAGGER_T * (1.6 if kind == "heavy" else 1.0)
-	_knock(-to_att, 12.0 if kind == "heavy" else 6.0)
+	var heavy_hit := kind == "heavy" or kind == "big"
+	stagger = STAGGER_T * (1.6 if heavy_hit else 1.0)
+	_knock(-to_att, 12.0 if heavy_hit else 6.0)
 	var spray := Vector3(cos(angle), sin(angle), 0)
 	spray = rig.global_basis * spray
 	if city:
-		city.oil(hit_at, (spray + -to_att * 0.6).normalized(), 18 if kind == "heavy" else 10)
+		city.oil(hit_at, (spray + -to_att * 0.6).normalized(), 18 if heavy_hit else 10)
 		city.sparks(hit_at, 10, Color(1, 0.7, 0.3))
-	_hitstop(0.09 if kind == "heavy" else 0.055)
+	_hitstop(0.09 if heavy_hit else 0.055)
 	if hp <= 0:
 		# Finished with a normal slash: the blade goes on through
 		var part := "upper" if absf(sin(angle)) < 0.5 else ("head" if randf() < 0.5 else "arm_r")
@@ -325,7 +341,7 @@ func apply_cut(attacker: Node, point: Vector2, dir: Vector2, axes: Array) -> Arr
 	var up: Vector3 = axes[1]
 	dir = dir.normalized()
 	var cuts: Array = []
-	var parts := {"head": 1.25, "arm_r": 1.1, "arm_l": 1.1, "leg_l": 1.3, "leg_r": 1.3}
+	var parts := {"head": 0.95, "arm_r": 0.75, "arm_l": 0.75, "leg_l": 0.6, "leg_r": 0.6}   # precise: you take what you aim for
 	for part in parts:
 		if lost.has(part):
 			continue

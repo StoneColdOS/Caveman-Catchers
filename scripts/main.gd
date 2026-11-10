@@ -12,7 +12,7 @@ const TouchScript := preload("res://scripts/touch_controls.gd")
 
 const PLAYER_SPAWN := Vector3(-72, 0.2, 72)
 const ENEMY_SPAWNS := [Vector3(24, 0.2, -24), Vector3(72, 0.2, 24), Vector3(-24, 0.2, -72), Vector3(-24, 0.2, 24)]
-const ENEMY_KINDS := ["gunner", "swordsman", "gunner", "swordsman"]
+const ENEMY_KINDS := ["swordsman", "swordsman", "swordsman", "swordsman"]
 
 var player: CharacterBody3D
 var city: Node3D
@@ -59,23 +59,30 @@ func _process(delta: float) -> void:
 
 
 func _build_environment() -> void:
-	# Tokyo night: deep blue-violet sky, hazy fog, neon does the rest
+	# Tokyo night, cleaner and brighter than before so fights read: lighter haze,
+	# filmic tonemapping, and glow so neon, blades and mech trim pop.
 	var env := Environment.new()
 	env.background_mode = Environment.BG_COLOR
-	env.background_color = Color(0.05, 0.045, 0.1)
+	env.background_color = Color(0.08, 0.08, 0.16)
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	env.ambient_light_color = Color(0.45, 0.45, 0.65)
-	env.ambient_light_energy = 0.35
+	env.ambient_light_color = Color(0.55, 0.58, 0.8)
+	env.ambient_light_energy = 0.7
 	env.fog_enabled = true
-	env.fog_light_color = Color(0.1, 0.08, 0.16)
-	env.fog_density = 0.012
+	env.fog_light_color = Color(0.14, 0.12, 0.22)
+	env.fog_density = 0.006
+	env.tonemap_mode = Environment.TONE_MAPPER_FILMIC
+	env.tonemap_exposure = 1.1
+	env.glow_enabled = true
+	env.glow_intensity = 0.9
+	env.glow_bloom = 0.08
+	env.glow_hdr_threshold = 0.85
 	var we := WorldEnvironment.new()
 	we.environment = env
 	add_child(we)
 
 	var moon := DirectionalLight3D.new()
 	moon.rotation_degrees = Vector3(-50, 35, 0)
-	moon.light_energy = 0.4
+	moon.light_energy = 0.95
 	moon.light_color = Color(0.6, 0.65, 0.95)
 	moon.shadow_enabled = true
 	moon.directional_shadow_max_distance = 90.0
@@ -104,6 +111,9 @@ func _build_ps1() -> void:
 	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	var sm := ShaderMaterial.new()
 	sm.shader = load("res://shaders/ps1.gdshader")
+	# Just a hint of retro now: high resolution, light dithering
+	sm.set_shader_parameter("pixel_height", 540.0)
+	sm.set_shader_parameter("color_levels", 96.0)
 	rect.material = sm
 	layer.add_child(rect)
 
@@ -225,7 +235,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "Slash: X/R2  Heavy: Y  Guard/parry: L1  Blade Mode: hold L2 (R-stick angle, L-stick slide, flick to cut)  Sprint: A  Crouch/roll/dive: B"
+	hint_label.text = "SWORD: right stick (sweep between directions)  Guard/parry: L1  Blade Mode: L2  Ninja run: R1  Jump: A  Dash: B"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44

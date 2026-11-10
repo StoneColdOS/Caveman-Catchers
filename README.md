@@ -1,46 +1,48 @@
 # Mech Mania
 
-A PSX-style giant-mech sword game. Pilot a lanky 10 m cyborg swordsman through a small night-time Tokyo, moving like Phantom Pain and fighting like Rising: quick slashes, heavies, parries, and Blade Mode, where time stops and you cut enemy mechs apart along any line you choose. Everything is exaggerated on purpose: oil gushes, sparks fly, kills drop into slow motion, buildings come down.
+A giant-mech sword game with an anime ninja streak. Pilot a lanky 10 m cyborg swordsman through a small night-time Tokyo. Your right stick IS the katana: sweep it and he slashes along that path. Every enemy has a blade too, so fights are real duels with clashes, parries and Blade Mode, where time stops and you cut mechs apart along any line. Everything is exaggerated on purpose: oil gushes, sparks fly, kills drop into slow motion, buildings come down.
 
 Built in Godot 4.7, for the AYN Thor handheld and phones.
 
 - [Design doc](docs/DESIGN.md): what we've decided and what's still open
 - [Roadmap](docs/ROADMAP.md): build order, one playable step at a time
 
-![Cut in half](docs/concept/mech-mania-cut-in-half.png)
+![A duel](docs/concept/mech-mania-duel-modern.png)
 
-![Blade Mode](docs/concept/mech-mania-blade-mode.png)
+![Cut in half](docs/concept/mech-mania-cut-in-half.png)
 
 ## How it plays
 
-- **Moving (Phantom Pain):** a light push walks, a full push jogs, and holding SPRINT runs flat out with a heavy lean. B crouches when you're standing, rolls when you're moving, and dives when you're sprinting (you launch flat out and slide). Close over-the-shoulder camera.
-- **Quick slash (X / R2):** tap three times for a combo.
-- **Heavy slash (Y):** smashes through a guard.
-- **Guard (L1):** blocks slashes and deflects bullets. Raise it just as a blade lands to **parry**: the attacker reels, wide open.
-- **Blade Mode (hold L2):** time nearly stops and a cut line appears across the nearest enemy. The right stick tilts the line and the left stick slides it. Flick the right stick (or press X) to cut. Whatever the line crosses comes off: head, either arm, either leg, or the whole upper body.
-  - Heads and torsos only give once he's weakened (visor flashing blue) or after a parry. Before that the armor holds and only limbs come off.
-  - A finishing cut through the head or torso repairs your armor.
-  - Blade Mode runs on blade energy, earned by landing hits and parries.
-- **Enemies:**
-  - Gunners (crimson) keep their distance and laser-sight you before every burst. Guard deflects the bullets.
-  - Swordsmen (gunmetal) duel you and telegraph every swing: the visor flashes white.
-  - Take a mech's weapon arm and he charges to slam you instead.
-- **Stealth:** a slash on an enemy who hasn't noticed you, from behind, leaves him wide open.
+- **The right stick is your sword:**
+  - Sweep it from one direction to another and he slashes along that path. Right-to-up gives a rising cut.
+  - A quick flick out and back cuts in that direction.
+  - A big sweep all the way across is a power cut that breaks guards.
+- **Guard (L1):** blocks blades. Raise it just as his blade lands to **parry**: he reels, wide open.
+- **Clash:** when both blades land at the same moment, sparks fly and you both bounce off.
+- **Blade Mode (hold L2):** time nearly stops. Swipe the stick and the cut goes along your swipe; the left stick slides the line. Whatever it crosses comes off.
+  - Heads and torsos only give once he's weakened (visor flashing blue) or after a parry.
+  - A finishing cut repairs your armor.
+- **Ninja moves:**
+  - Hold **R1** to ninja run: ducked, leaning hard, blade streaming behind. You smash through low buildings.
+  - **A** is a big leap that flips when you're moving and can land on rooftops.
+  - **B** dashes when you're moving, crouches when you're still, and dives when you're ninja running.
+- **Camera:** it follows on its own (the right stick is busy) and frames whoever you're fighting. You square up to him, so the left stick circles him. R3 recenters.
+- **Enemies:** every enemy is a swordsman, and each one flashes his visor white before he swings.
 
 | | Thor / gamepad | Keyboard |
 |---|---|---|
 | Move | Left stick | WASD |
-| Sprint | Hold A | Shift |
-| Camera | Right stick | Arrow keys |
-| Quick slash | X or R2 | J |
-| Heavy slash | Y | K |
+| Sword | Right stick (sweep between directions) | Arrow keys |
+| Quick / heavy slash (backups) | X / Y | J / K |
 | Guard / parry | L1 | L |
-| Blade Mode | Hold L2 (R-stick angle, L-stick slide, flick or X to cut) | Hold F |
-| Crouch / roll / dive | B | C |
-| Walk | Hold L3 | Ctrl |
+| Blade Mode | Hold L2 | Hold F |
+| Ninja run | Hold R1 | Shift |
+| Jump | A | Space |
+| Dash / crouch / dive | B | C |
+| Recenter camera | R3 | Tab |
 | Restart | Start | Enter |
 
-On a phone, Blade Mode is a toggle button, and you **swipe** on the right side of the screen to cut along your swipe.
+On a phone: **swipe on the right side of the screen to slash** (keep your finger down and swipe again to chain). The buttons are JUMP, GUARD, DODGE, BLADE (toggle) and NINJA (toggle).
 
 ## Running it
 

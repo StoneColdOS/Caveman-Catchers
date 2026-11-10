@@ -1,10 +1,11 @@
 extends Control
 ## On-screen controls for phones.
 ##   Left side:  floating joystick (light push walks, full push jogs).
-##   Right side: drag to turn the camera. In BLADE MODE, swipe instead: the cut goes
-##               along your swipe (the line previews while your finger is down).
-##   Buttons:    Slash, Heavy, Guard (hold; tap right as a blade lands to parry),
-##               Blade Mode (toggle), Dodge (crouch / roll / dive), Sprint (toggle).
+##   Right side: SWIPE TO SLASH. The sword follows your swipe (keep your finger down
+##               and swipe again to chain). A long fast swipe is a power cut.
+##               In Blade Mode the swipe is the cut line.
+##   Buttons:    Jump, Guard (hold; tap right as a blade lands to parry), Blade Mode
+##               (toggle), Dodge (crouch / dash / dive), Ninja run (toggle).
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -36,12 +37,11 @@ func _layout() -> void:
 	var right := s.x - 90.0
 	var bottom := s.y - 90.0
 	buttons = {
-		"slash":  {"pos": Vector2(right, bottom), "radius": 56.0, "label": "SLASH", "action": "attack", "toggle": false},
-		"heavy":  {"pos": Vector2(right - 20, bottom - 125), "radius": r, "label": "HEAVY", "action": "heavy", "toggle": false},
-		"guard":  {"pos": Vector2(right - 135, bottom + 10), "radius": r, "label": "GUARD", "action": "guard", "toggle": false},
-		"blade":  {"pos": Vector2(right - 130, bottom - 105), "radius": r, "label": "BLADE", "action": "blade", "toggle": true},
-		"dodge":  {"pos": Vector2(right - 250, bottom + 25), "radius": 38.0, "label": "DODGE", "action": "roll", "toggle": false},
-		"sprint": {"pos": Vector2(right - 245, bottom - 75), "radius": 36.0, "label": "SPRINT", "action": "sprint", "toggle": true},
+		"jump":   {"pos": Vector2(right, bottom), "radius": 50.0, "label": "JUMP", "action": "jump", "toggle": false},
+		"guard":  {"pos": Vector2(right - 125, bottom + 10), "radius": r, "label": "GUARD", "action": "guard", "toggle": false},
+		"dodge":  {"pos": Vector2(right - 10, bottom - 120), "radius": r, "label": "DODGE", "action": "roll", "toggle": false},
+		"blade":  {"pos": Vector2(215, s.y - 340), "radius": 40.0, "label": "BLADE", "action": "blade", "toggle": true},
+		"sprint": {"pos": Vector2(95, s.y - 340), "radius": 40.0, "label": "NINJA", "action": "sprint", "toggle": true},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
 	}
 	queue_redraw()
@@ -107,14 +107,16 @@ func _touch_move(finger: int, pos: Vector2) -> void:
 	elif finger == look_finger:
 		var d := pos - look_last
 		look_last = pos
+		var sw := pos - swipe_start
 		if player and player.in_blade_mode():
-			var sw := pos - swipe_start
 			if sw.length() > 12.0:
 				player.touch_cutting = true
 				player.touch_cut_angle = atan2(-sw.y, sw.x)
-		elif player:
-			player.yaw -= d.x * LOOK_SENSITIVITY
-			player.pitch = clamp(player.pitch - d.y * LOOK_SENSITIVITY, -1.2, 0.6)
+		elif player and sw.length() > 70.0:
+			# A swipe: slash along it, then start tracking the next one
+			var dir := Vector2(sw.x, -sw.y) / 70.0
+			player.touch_swipe(dir)
+			swipe_start = pos
 
 
 func _touch_up(finger: int) -> void:
@@ -166,8 +168,9 @@ func _draw() -> void:
 		var hint := Vector2(150, s.y - 150)
 		draw_arc(hint, STICK_RADIUS, 0, TAU, 40, Color(1, 1, 1, 0.18), 3.0)
 		draw_string(font, hint + Vector2(-34, 6), "MOVE", HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 1, 1, 0.35))
-	if player and player.in_blade_mode() and look_finger == -1:
-		draw_string(font, Vector2(s.x * 0.55, s.y * 0.5), "SWIPE TO CUT", HORIZONTAL_ALIGNMENT_LEFT, -1, 26, Color(0.75, 0.92, 1.0, 0.8))
+	if look_finger == -1:
+		var msg := "SWIPE TO CUT" if player and player.in_blade_mode() else "SWIPE TO SLASH"
+		draw_string(font, Vector2(s.x * 0.58, s.y * 0.42), msg, HORIZONTAL_ALIGNMENT_LEFT, -1, 24, Color(0.75, 0.92, 1.0, 0.45))
 	for name in buttons:
 		var b: Dictionary = buttons[name]
 		var held: bool = button_fingers.values().has(name) or (b.toggle and toggles.get(name, false))
