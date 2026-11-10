@@ -107,12 +107,19 @@ func _run() -> void:
 	Input.action_press("look_up", 1.0)
 	await _frames(20)
 	_check(player.part == "head", "Right stick up slides the aim to the HEAD")
+	Input.action_release("look_up")
+	await _frames(20)
+	_check(player.part == "body", "Let go of the stick: back to center mass")
+	Input.action_press("part_head")
+	await _frames(2)
+	Input.action_release("part_head")
+	await _frames(20)
+	_check(player.part == "head", "HEAD button: aim sticks to the head with no stick needed")
 	player.lock = 1.0
 	player.fire_cd = 0.0
 	player.fire()
 	await _frames(3)
 	_check(e1.lost_head and e1.dead, "Full-lock headshot: HEAD OFF")
-	Input.action_release("look_up")
 	Input.action_release("lock")
 	await _frames(5)
 
@@ -339,6 +346,11 @@ func _run() -> void:
 	t._touch_down(1, t.buttons["lock"].pos)
 	t._touch_up(1)
 	_check(not Input.is_action_pressed("lock"), "...and off")
+	# Part buttons appear only while locked and make the aim stick to that part
+	_check(not Input.is_action_pressed("part_head"), "No part buttons when not locked")
+	t._touch_down(1, t.buttons["head"].pos)
+	t._touch_up(1)
+	_check(not Input.is_action_pressed("part_head"), "...tapping where HEAD would be does nothing")
 
 	print("\n%s" % ("ALL TESTS PASSED" if failures == 0 else "%d TEST(S) FAILED" % failures))
 	quit(failures)

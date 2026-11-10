@@ -56,6 +56,8 @@ var target: Node = null
 var part := "body"                # part under the aim dot (for the HUD)
 var aim_offset := Vector2.ZERO    # right stick / touch drag, -1..1
 var touch_aim := Vector2.ZERO
+var sticky_aim := Vector2.ZERO    # set by the part buttons; stays until changed
+const PART_AIM := {"body": Vector2.ZERO, "head": Vector2(0, -1), "arm": Vector2(1, 0), "leg": Vector2(0, 1)}
 var lock := 0.0                   # 0..1, how settled your aim is
 var fire_cd := 0.0
 var fired_t := 0.0                # time since your last shot (enemies dodge when you open up)
@@ -289,12 +291,16 @@ func _input_actions(delta: float, input: Vector2, look: Vector2) -> void:
 			crouching = not crouching
 	# Locked: the right stick (or touch drag) slides your aim over his body
 	if target:
-		var want := (look + touch_aim).limit_length(1.0)
+		for p in PART_AIM:
+			if Input.is_action_just_pressed("part_" + p):
+				sticky_aim = PART_AIM[p]
+		var want := (sticky_aim if look.length() < 0.25 and touch_aim.length() < 0.05 else look + touch_aim).limit_length(1.0)
 		aim_offset = aim_offset.lerp(want, clampf(12.0 * delta, 0.0, 1.0))
 		part = target._part_at(lock_point()) if target.has_method("_part_at") else "body"
 	else:
 		aim_offset = Vector2.ZERO
 		touch_aim = Vector2.ZERO
+		sticky_aim = Vector2.ZERO
 		part = "body"
 	if Input.is_action_pressed("fire") and fire_cd <= 0.0:
 		fire()

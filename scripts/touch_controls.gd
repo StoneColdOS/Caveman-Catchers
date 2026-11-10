@@ -3,7 +3,8 @@ extends Control
 ##   Left side:  floating joystick. Light push sneaks, full push runs.
 ##   Right side: drag anywhere empty to look around.
 ##   Buttons:    Fire, Lock (toggle), Roll/Crouch, Jump, Reload.
-##   While locked on, dragging on the right slides your aim to head / arm / leg.
+##   While locked on, HEAD / ARM / LEG / BODY buttons appear: tap one and your aim
+##   sticks to that part, so the same thumb can then hit FIRE.
 
 const STICK_RADIUS := 80.0
 const LOOK_SENSITIVITY := 0.006
@@ -39,6 +40,10 @@ func _layout() -> void:
 		"jump":   {"pos": Vector2(right - 245, bottom + 25), "radius": 38.0, "label": "JUMP", "action": "jump", "toggle": false},
 		"reload": {"pos": Vector2(right + 20, bottom - 215), "radius": 36.0, "label": "RELOAD", "action": "reload", "toggle": false},
 		"restart": {"pos": Vector2(s.x - 60, 150), "radius": 30.0, "label": "RESET", "action": "restart", "toggle": false},
+		"head":   {"pos": Vector2(right - 215, bottom - 250), "radius": 32.0, "label": "HEAD", "action": "part_head", "toggle": false, "locked": true},
+		"arm":    {"pos": Vector2(right - 215, bottom - 180), "radius": 32.0, "label": "ARM", "action": "part_arm", "toggle": false, "locked": true},
+		"leg":    {"pos": Vector2(right - 215, bottom - 110), "radius": 32.0, "label": "LEG", "action": "part_leg", "toggle": false, "locked": true},
+		"body":   {"pos": Vector2(right - 285, bottom - 180), "radius": 32.0, "label": "BODY", "action": "part_body", "toggle": false, "locked": true},
 	}
 	queue_redraw()
 
@@ -63,6 +68,8 @@ func _input(event: InputEvent) -> void:
 func _touch_down(finger: int, pos: Vector2) -> void:
 	for name in buttons:
 		var b: Dictionary = buttons[name]
+		if b.get("locked", false) and not (player and player.target):
+			continue   # part buttons only exist while locked on
 		if pos.distance_to(b.pos) <= b.radius * 1.15:
 			button_fingers[finger] = name
 			if b.toggle:
@@ -157,11 +164,15 @@ func _draw() -> void:
 	# Buttons
 	for name in buttons:
 		var b: Dictionary = buttons[name]
+		if b.get("locked", false) and not (player and player.target):
+			continue
 		var held: bool = button_fingers.values().has(name) or (b.toggle and toggles.get(name, false))
 		var fill := Color(1, 0.85, 0.3, 0.55) if held else Color(0, 0, 0, 0.35)
 		draw_circle(b.pos, b.radius, fill)
 		draw_arc(b.pos, b.radius, 0, TAU, 40, Color(1, 1, 1, 0.65), 3.0)
 		var text: String = b.label
+		if b.get("locked", false) and player and player.part == name:
+			draw_circle(b.pos, b.radius, Color(1, 0.25, 0.2, 0.6))   # the part you're aimed at
 		if name == "roll" and player and player.crouching:
 			draw_circle(b.pos, b.radius, Color(1, 0.85, 0.3, 0.55))
 			text = "CROUCH"

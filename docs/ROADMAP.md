@@ -35,6 +35,7 @@ Art comes late on purpose. Everything starts as grey boxes and capsules.
 - [x] Less vertex jitter on the mechs (the city keeps it)
 - [x] Full-body lock; the right stick slides the aim dot to head / gun arm / leg (touch: drag while locked)
 - [x] Enemies jink and dodge-roll when you're locked on or firing; moving targets settle slower
+- [x] Fire moved to R2 so the thumb can aim while shooting; sticky part buttons on the phone
 - [ ] Play it: does the sprint feel natural now? Is the lock hard enough without being frustrating?
 
 ## Prototype 10: full Syphon Filter movement + dismemberment

@@ -209,7 +209,7 @@ func _build_hud() -> void:
 	layer.add_child(result_label)
 
 	hint_label = Label.new()
-	hint_label.text = "Run: L-stick  Lock: R1 (R-stick aims: head/arm/leg)  Aim: L1  Fire: X  Sidestep: L2/R2  Roll/Crouch: B  Jump: A  Reload: Y"
+	hint_label.text = "Run: L-stick  Lock: R1 (R-stick aims: head/arm/leg)  Fire: R2  Manual aim: L1  Roll: L2 or B  Jump: A  Reload: Y"
 	hint_label.anchor_top = 1.0
 	hint_label.anchor_bottom = 1.0
 	hint_label.offset_top = -44

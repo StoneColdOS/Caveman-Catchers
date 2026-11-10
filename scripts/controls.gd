@@ -7,9 +7,10 @@ extends RefCounted
 ##   Camera      right stick / arrow keys
 ##   Lock on     R1 (hold)   / K      (run and gun; right stick slides your aim to head / arm / leg)
 ##   Manual aim  L1 (hold)   / L      (precise crosshair)
-##   Fire        X           / J
-##   Sidestep    L2 / R2     / Q / E
-##   Roll/crouch B           / C      (moving = roll, standing = crouch)
+##   Fire        R2 or X     / J      (R2 keeps your right thumb free to aim)
+##   Sidestep                / Q / E  (while locked, the left stick strafes anyway)
+##   Roll/crouch B or L2     / C      (moving = roll, standing = crouch)
+##   Part pick               / 1-4    (body / head / arm / leg; sticks until you change it)
 ##   Jump        A           / Space
 ##   Reload      Y           / R
 ##   Restart     Start       / Enter
@@ -37,17 +38,25 @@ static func setup() -> void:
 	_action("fire")
 	_key("fire", KEY_J)
 	_button("fire", JOY_BUTTON_X)
+	_axis("fire", JOY_AXIS_TRIGGER_RIGHT, 1.0)    # R2: index finger fires, thumb stays on the aim stick
 
 	_action("strafe_left")
 	_key("strafe_left", KEY_Q)
-	_axis("strafe_left", JOY_AXIS_TRIGGER_LEFT, 1.0)
 	_action("strafe_right")
 	_key("strafe_right", KEY_E)
-	_axis("strafe_right", JOY_AXIS_TRIGGER_RIGHT, 1.0)
+
+	# Sticky part picks (phone buttons / number keys): the aim stays on that part
+	for part in ["body", "head", "arm", "leg"]:
+		_action("part_" + part)
+	_key("part_body", KEY_1)
+	_key("part_head", KEY_2)
+	_key("part_arm", KEY_3)
+	_key("part_leg", KEY_4)
 
 	_action("roll")
 	_key("roll", KEY_C)
 	_button("roll", JOY_BUTTON_B)
+	_axis("roll", JOY_AXIS_TRIGGER_LEFT, 1.0)      # L2: quick dodge
 
 	_action("jump")
 	_key("jump", KEY_SPACE)
